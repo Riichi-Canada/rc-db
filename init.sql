@@ -59,8 +59,8 @@ INSERT INTO clubs (club_name, club_short_name)
 VALUES
     ('Club Riichi de Montréal', 'CRM'),
     ('Toronto Riichi Club', 'TORI'),
-    ('Gatineau-Ottawa Riichi', 'GO Riichi'),
-    ('University of British Columbia Mahjong Club', 'UBC Mahjong');
+    ('University of British Columbia Mahjong Club', 'UBC Mahjong'),
+    ('Gatineau-Ottawa Riichi', 'GO Riichi');
 --endregion Clubs
 
 --region Events
@@ -68,10 +68,10 @@ CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
     event_name TEXT UNIQUE NOT NULL,
     event_region INT REFERENCES regions(id),
-    event_type INT REFERENCES event_types(id),
+    event_type INT NOT NULL REFERENCES event_types(id),
     event_start_date DATE NOT NULL,
     event_end_date DATE NOT NULL,
-    event_city TEXT NOT NULL,
+    event_city TEXT,
     event_country TEXT NOT NULL,
     number_of_players INT NOT NULL,
     is_online BOOLEAN NOT NULL
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS event_results (
     player_first_name TEXT NOT NULL,
     player_last_name TEXT NOT NULL,
     placement INT NOT NULL,
-    score NUMERIC(7, 2) NOT NULL,
+    score NUMERIC(10, 2) NOT NULL,
     PRIMARY KEY (event_id, player_id)
 );
 --endregion Event results
