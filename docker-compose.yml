@@ -1,0 +1,15 @@
+services:
+  db:
+    image: postgres:17
+    container_name: rc-postgres-db
+    environment:
+      POSTGRES_USER: riichi
+      POSTGRES_PASSWORD: riichi
+      POSTGRES_DB: riichi-canada
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+volumes:
+  pg_data:
