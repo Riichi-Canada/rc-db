@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS event_results (
     player_first_name TEXT NOT NULL,
     player_last_name TEXT NOT NULL,
     placement INT NOT NULL,
+    score NUMERIC(7, 2) NOT NULL,
     PRIMARY KEY (event_id, player_id)
 );
 --endregion Event results
