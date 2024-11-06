@@ -1,12 +1,12 @@
 BEGIN;
 
 --region Drop existing data
-DROP TABLE IF EXISTS event_types;
-DROP TABLE IF EXISTS regions;
-DROP TABLE IF EXISTS clubs;
-DROP TABLE IF EXISTS events;
-DROP TABLE IF EXISTS players;
-DROP TABLE IF EXISTS event_results;
+DROP TABLE IF EXISTS event_types CASCADE;
+DROP TABLE IF EXISTS regions CASCADE;
+DROP TABLE IF EXISTS clubs CASCADE;
+DROP TABLE IF EXISTS events CASCADE;
+DROP TABLE IF EXISTS players CASCADE;
+DROP TABLE IF EXISTS event_results CASCADE;
 --endregion Drop existing data
 
 --region Event types
@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS players (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     player_region INT NOT NULL REFERENCES regions(id),
-    player_club INT NOT NULL REFERENCES clubs(id)
+    player_club INT REFERENCES clubs(id)
 );
 --endregion Players
 
