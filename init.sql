@@ -90,13 +90,14 @@ CREATE TABLE IF NOT EXISTS players (
 
 --region Event results
 CREATE TABLE IF NOT EXISTS event_results (
+    result_id SERIAL PRIMARY KEY,
     event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     player_id INT REFERENCES players(id) ON DELETE CASCADE,
     player_first_name TEXT NOT NULL,
     player_last_name TEXT NOT NULL,
     placement INT NOT NULL,
     score NUMERIC(10, 2) NOT NULL,
-    PRIMARY KEY (event_id, player_id)
+    UNIQUE (event_id, player_id)
 );
 --endregion Event results
 
