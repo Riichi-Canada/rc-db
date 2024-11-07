@@ -4,7 +4,7 @@ event_id,player_id,player_first_name,player_last_name,placement,score
 3,29,Daniel,Tutor,3,167900
 3,9,Collin,Wang,4,164400
 3,30,Jimmy,C,5,150800
-3,31,Chang,L,6,144600
+3,31,Chang,Liu,6,144600
 3,10,Vincent,Shao,7,130100
 3,8,Mark,T,8,113800
 3,32,Alex,D,9,70600
@@ -16,9 +16,9 @@ event_id,player_id,player_first_name,player_last_name,placement,score
 3,36,Eric,Zhang,15,-93700
 3,6,Stephen,So,16,-113500
 3,37,Jon,R,17,-115700
-3,38,Bianca,G,18,-120900
+3,38,Bianca,Granato,18,-120900
 3,39,Yifan,W,19,-121200
 3,40,Vivian,O,20,-123300
 3,41,Toshihiro,Sakurai,21,-243300
 3,42,Alexander,A,22,-255600
-3,43,Lisa,S,23,-341800
+3,43,Lisa,Stewart Iwasa,23,-341800
