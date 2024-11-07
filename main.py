@@ -4,13 +4,14 @@ from import_event import import_event_data
 from import_event_results import import_event_results_data
 from db_config import DB_NAME, DB_HOST, DB_USER, DB_PASSWORD
 
+DATABASE_PATH = f'postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
+
 
 def import_all_data() -> None:
     """
     Imports data for all players, events and event results from CSV files into the database.
     """
 
-    DATABASE_PATH = f'postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
     PLAYERS_CSV_PATH = './data/players/players.csv'
     EVENT_PATHS = [
         './data/events/montreal_riichi_open/mro_2023.csv',
