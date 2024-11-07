@@ -26,6 +26,7 @@ def import_event_results_data(csv_path: str, db_path: str) -> None:
         :param event_id: Textual event ID
         :return: Numeric event ID
         """
+
         event = session.query(Event).filter_by(event_id=event_id).first()
         return event.id if event else None
 
