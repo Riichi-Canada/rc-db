@@ -1,6 +1,10 @@
 BEGIN;
 
 --region Drop existing data
+DROP TRIGGER IF EXISTS before_insert_event ON events;
+DROP FUNCTION IF EXISTS generate_event_id;
+DROP TABLE IF EXISTS event_id_sequences CASCADE;
+
 DROP TABLE IF EXISTS event_types CASCADE;
 DROP TABLE IF EXISTS regions CASCADE;
 DROP TABLE IF EXISTS clubs CASCADE;
@@ -66,6 +70,7 @@ VALUES
 --region Events
 CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
+    event_id TEXT UNIQUE NOT NULL,
     event_name TEXT UNIQUE NOT NULL,
     event_region INT REFERENCES regions(id),
     event_type INT NOT NULL REFERENCES event_types(id),
@@ -76,6 +81,46 @@ CREATE TABLE IF NOT EXISTS events (
     number_of_players INT NOT NULL,
     is_online BOOLEAN NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS event_id_sequences (
+    year INT NOT NULL,
+    event_type INT NOT NULL,
+    current_number INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (year, event_type)
+);
+
+CREATE OR REPLACE FUNCTION generate_event_id() RETURNS trigger as $$
+DECLARE
+    year_part TEXT;
+    type_part TEXT;
+    number_part TEXT;
+BEGIN
+    year_part := TO_CHAR(NEW.event_start_date, 'YYYY');
+    type_part := LPAD(NEW.event_type::TEXT, 2, '0');
+
+    UPDATE event_id_sequences
+    SET current_number = current_number + 1
+    WHERE year = EXTRACT(YEAR FROM NEW.event_start_date)::INT AND event_type = NEW.event_type;
+
+    IF NOT FOUND THEN
+        INSERT INTO event_id_sequences (year, event_type, current_number)
+        VALUES (EXTRACT(YEAR FROM NEW.event_start_date)::INT, NEW.event_type, 1);
+    END IF;
+
+    SELECT LPAD(current_number::TEXT, 4, '0') INTO number_part
+    FROM event_id_sequences
+    WHERE year = EXTRACT(YEAR FROM NEW.event_start_date)::INT AND event_type = NEW.event_type;
+
+    NEW.event_id := year_part || '-' || type_part || number_part;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER before_insert_event
+    BEFORE INSERT ON events
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_event_id();
 --endregion Events
 
 --region Players
@@ -90,7 +135,7 @@ CREATE TABLE IF NOT EXISTS players (
 
 --region Event results
 CREATE TABLE IF NOT EXISTS event_results (
-    result_id SERIAL PRIMARY KEY,
+    id SERIAL PRIMARY KEY,
     event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
     player_id INT REFERENCES players(id) ON DELETE CASCADE,
     player_first_name TEXT NOT NULL,
