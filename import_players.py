@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 
 def import_player_data(csv_path: str, db_path: str) -> None:
     """
-    Import data for all players into the database.
+    Imports data for all players into the database.
 
     :param csv_path: Path to players CSV
     :param db_path: Database URL

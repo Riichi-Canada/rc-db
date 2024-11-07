@@ -4,7 +4,7 @@ from sqlalchemy import create_engine
 
 def import_event_data(csv_path: str, db_path: str) -> None:
     """
-    Import data for an event into the database.
+    Imports data for an event into the database.
 
     :param csv_path: Path to event CSV
     :param db_path: Database URL
