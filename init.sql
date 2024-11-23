@@ -171,7 +171,6 @@ BEGIN
     SELECT number_of_players INTO num_of_players FROM events WHERE id = NEW.event_id;
     placement := NEW.placement;
 
-    --1000*([@P]-[@R])/([@P]-1)
     main_points := ROUND(1000 * (num_of_players - placement) / (num_of_players - 1), 2);
 
     fsb := 200 + 2.5 * (num_of_players - 16);
@@ -189,7 +188,7 @@ BEGIN
                       END
                 )
              END;
-    tank_points = ROUND(tank_points, 2);
+    tank_points := ROUND(tank_points, 2);
 
     INSERT INTO event_scores_2025_cycle (result_id, main_score, tank_score)
     VALUES (NEW.id, main_points, tank_points);
