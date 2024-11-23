@@ -4,6 +4,8 @@ BEGIN;
 DROP TRIGGER IF EXISTS before_insert_event ON events;
 DROP FUNCTION IF EXISTS generate_event_id;
 DROP TABLE IF EXISTS event_id_sequences CASCADE;
+DROP TRIGGER IF EXISTS after_event_result_insert ON event_results;
+DROP FUNCTION IF EXISTS insert_event_score;
 
 DROP TABLE IF EXISTS event_types CASCADE;
 DROP TABLE IF EXISTS regions CASCADE;
@@ -11,6 +13,7 @@ DROP TABLE IF EXISTS clubs CASCADE;
 DROP TABLE IF EXISTS events CASCADE;
 DROP TABLE IF EXISTS players CASCADE;
 DROP TABLE IF EXISTS event_results CASCADE;
+DROP TABLE IF EXISTS event_scores_2025_cycle CASCADE;
 --endregion Drop existing data
 
 --region Event types
@@ -145,5 +148,60 @@ CREATE TABLE IF NOT EXISTS event_results (
     UNIQUE (event_id, player_id)
 );
 --endregion Event results
+
+-- region Event scores
+CREATE TABLE IF NOT EXISTS event_scores_2025_cycle (
+    id SERIAL PRIMARY KEY,
+    result_id INT NOT NULL REFERENCES event_results(id) ON DELETE CASCADE,
+    main_score NUMERIC(6, 2) NOT NULL,
+    tank_score NUMERIC(5, 2) NOT NULL
+);
+
+CREATE OR REPLACE FUNCTION insert_event_score() RETURNS TRIGGER AS $$
+DECLARE
+    num_of_players INT;
+    placement INT;
+    main_points NUMERIC(6, 2);
+    fsb NUMERIC(6, 2);
+    q1s NUMERIC(6, 2);
+    q2s NUMERIC(6, 2);
+    qsize NUMERIC(6, 2);
+    tank_points NUMERIC(5, 2);
+BEGIN
+    SELECT number_of_players INTO num_of_players FROM events WHERE id = NEW.event_id;
+    placement := NEW.placement;
+
+    --1000*([@P]-[@R])/([@P]-1)
+    main_points := ROUND(1000 * (num_of_players - placement) / (num_of_players - 1), 2);
+
+    fsb := 200 + 2.5 * (num_of_players - 16);
+    q1s := fsb * 0.5 / (FLOOR(0.25 * num_of_players) - 1);
+    q2s := (fsb - 100) * 0.5 / (FLOOR(0.5 * num_of_players - 1) - (FLOOR(0.25 * num_of_players - 1)));
+    qsize := FLOOR(num_of_players / 4);
+    tank_points := CASE
+                WHEN placement > (num_of_players / 2) THEN 0
+                ELSE LEAST(
+                    200,
+                    fsb - (LEAST(placement, qsize) - 1) * q1s
+                    - CASE
+                        WHEN placement > qsize THEN (placement - qsize) * q2s
+                        ELSE 0
+                      END
+                )
+             END;
+    tank_points = ROUND(tank_points, 2);
+
+    INSERT INTO event_scores_2025_cycle (result_id, main_score, tank_score)
+    VALUES (NEW.id, main_points, tank_points);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER after_event_result_insert
+    AFTER INSERT ON event_results
+    FOR EACH ROW
+    EXECUTE FUNCTION insert_event_score();
+-- endregion Event scores
+
 
 COMMIT;
