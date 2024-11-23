@@ -14,6 +14,7 @@ DROP TABLE IF EXISTS events CASCADE;
 DROP TABLE IF EXISTS players CASCADE;
 DROP TABLE IF EXISTS event_results CASCADE;
 DROP TABLE IF EXISTS event_scores_2025_cycle CASCADE;
+DROP TABLE IF EXISTS player_scores_2025_cycle CASCADE;
 --endregion Drop existing data
 
 --region Event types
@@ -91,39 +92,6 @@ CREATE TABLE IF NOT EXISTS event_id_sequences (
     current_number INT NOT NULL DEFAULT 0,
     PRIMARY KEY (year, event_type)
 );
-
-CREATE OR REPLACE FUNCTION generate_event_id() RETURNS trigger as $$
-DECLARE
-    year_part TEXT;
-    type_part TEXT;
-    number_part TEXT;
-BEGIN
-    year_part := TO_CHAR(NEW.event_start_date, 'YYYY');
-    type_part := LPAD(NEW.event_type::TEXT, 2, '0');
-
-    UPDATE event_id_sequences
-    SET current_number = current_number + 1
-    WHERE year = EXTRACT(YEAR FROM NEW.event_start_date)::INT AND event_type = NEW.event_type;
-
-    IF NOT FOUND THEN
-        INSERT INTO event_id_sequences (year, event_type, current_number)
-        VALUES (EXTRACT(YEAR FROM NEW.event_start_date)::INT, NEW.event_type, 1);
-    END IF;
-
-    SELECT LPAD(current_number::TEXT, 4, '0') INTO number_part
-    FROM event_id_sequences
-    WHERE year = EXTRACT(YEAR FROM NEW.event_start_date)::INT AND event_type = NEW.event_type;
-
-    NEW.event_id := year_part || '-' || type_part || number_part;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER before_insert_event
-    BEFORE INSERT ON events
-    FOR EACH ROW
-    EXECUTE FUNCTION generate_event_id();
 --endregion Events
 
 --region Players
@@ -132,7 +100,8 @@ CREATE TABLE IF NOT EXISTS players (
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     player_region INT NOT NULL REFERENCES regions(id),
-    player_club INT REFERENCES clubs(id)
+    player_club INT REFERENCES clubs(id),
+    player_score_2025_cycle NUMERIC(6, 2)
 );
 --endregion Players
 
@@ -156,51 +125,23 @@ CREATE TABLE IF NOT EXISTS event_scores_2025_cycle (
     main_score NUMERIC(6, 2) NOT NULL,
     tank_score NUMERIC(5, 2) NOT NULL
 );
-
-CREATE OR REPLACE FUNCTION insert_event_score() RETURNS TRIGGER AS $$
-DECLARE
-    num_of_players INT;
-    placement INT;
-    main_points NUMERIC(6, 2);
-    fsb NUMERIC(6, 2);
-    q1s NUMERIC(6, 2);
-    q2s NUMERIC(6, 2);
-    qsize NUMERIC(6, 2);
-    tank_points NUMERIC(5, 2);
-BEGIN
-    SELECT number_of_players INTO num_of_players FROM events WHERE id = NEW.event_id;
-    placement := NEW.placement;
-
-    main_points := ROUND(1000 * (num_of_players - placement) / (num_of_players - 1), 2);
-
-    fsb := 200 + 2.5 * (num_of_players - 16);
-    q1s := fsb * 0.5 / (FLOOR(0.25 * num_of_players) - 1);
-    q2s := (fsb - 100) * 0.5 / (FLOOR(0.5 * num_of_players - 1) - (FLOOR(0.25 * num_of_players - 1)));
-    qsize := FLOOR(num_of_players / 4);
-    tank_points := CASE
-                WHEN placement > (num_of_players / 2) THEN 0
-                ELSE LEAST(
-                    200,
-                    fsb - (LEAST(placement, qsize) - 1) * q1s
-                    - CASE
-                        WHEN placement > qsize THEN (placement - qsize) * q2s
-                        ELSE 0
-                      END
-                )
-             END;
-    tank_points := ROUND(tank_points, 2);
-
-    INSERT INTO event_scores_2025_cycle (result_id, main_score, tank_score)
-    VALUES (NEW.id, main_points, tank_points);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER after_event_result_insert
-    AFTER INSERT ON event_results
-    FOR EACH ROW
-    EXECUTE FUNCTION insert_event_score();
 -- endregion Event scores
 
+-- region Player scores
+CREATE TABLE IF NOT EXISTS player_scores_2025_cycle(
+    id SERIAL PRIMARY KEY,
+    player_id INT NOT NULL REFERENCES players(id),
+    out_of_region_live INT REFERENCES event_results(id),
+    other_live_1 INT REFERENCES event_results(id),
+    other_live_2 INT REFERENCES event_results(id),
+    any_event_1 INT REFERENCES event_results(id),
+    any_event_2 INT REFERENCES event_results(id),
+    tank_1 INT REFERENCES event_results(id),
+    tank_2 INT REFERENCES event_results(id),
+    tank_3 INT REFERENCES event_results(id),
+    tank_4 INT REFERENCES event_results(id),
+    tank_5 INT REFERENCES event_results(id)
+);
+-- endregion Player scores
 
 COMMIT;
