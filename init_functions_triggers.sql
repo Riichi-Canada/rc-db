@@ -52,7 +52,8 @@ CREATE TRIGGER before_insert_event
 
 -- region Event scores
 
-CREATE OR REPLACE FUNCTION insert_event_score(new_result_id INT, new_event_id INT, placement INT) RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION insert_event_score(new_result_id INT, new_event_id INT, placement INT)
+RETURNS VOID AS $$
 DECLARE
     num_of_players INT;
     main_points NUMERIC(6, 2);
@@ -95,16 +96,21 @@ CREATE TYPE result_score_pair AS (
     score NUMERIC(6, 2)
 );
 
-CREATE OR REPLACE FUNCTION event_is_valid_2025_cycle(end_date DATE, num_of_players INT)
+CREATE OR REPLACE FUNCTION event_is_valid_2025_cycle(end_date DATE, num_of_players INT, new_event_id INT)
 RETURNS BOOLEAN AS $$
 DECLARE
     period_start_date DATE;
     period_end_date DATE;
+    eventtype INT;
 BEGIN
     period_start_date := '2022-01-01'::DATE;
     period_end_date := '2024-12-31'::DATE;
 
-    IF (end_date >= period_start_date AND end_date <= period_end_date AND num_of_players >= 24) THEN
+    eventtype := (SELECT event_type FROM events WHERE id = new_event_id);
+
+    IF (end_date >= period_start_date
+            AND end_date <= period_end_date
+            AND (num_of_players >= 24 OR eventtype = 2)) THEN
         RETURN TRUE;
     ELSE
         RETURN FALSE;
@@ -135,7 +141,7 @@ DECLARE
     current_tank_scores result_score_pair[];
     new_tank_score NUMERIC(5, 2);
     i INT;
-    temp_score RECORD;
+    temp_score NUMERIC(6, 2);
 BEGIN
     -- Get current tank IDs
     SELECT ARRAY[ps.tank_1, ps.tank_2, ps.tank_3, ps.tank_4, ps.tank_5]
@@ -149,10 +155,9 @@ BEGIN
     -- Get the current tank scores from the corresponding result IDs. If there are no results at all, skip this step
     IF current_tank_ids[1] IS NOT NULL THEN
         FOR i in 1..array_length(current_tank_ids, 1) LOOP
-            SELECT es.tank_score
-                INTO temp_score
+            temp_score := (SELECT es.tank_score
                 FROM event_scores_2025_cycle es
-                WHERE es.result_id = current_tank_ids[i];
+                WHERE es.result_id = current_tank_ids[i]);
 
             current_tank_scores[i].result_id := current_tank_ids[i];
             current_tank_scores[i].score := temp_score;
@@ -207,10 +212,10 @@ CREATE OR REPLACE FUNCTION compute_global_points_2025_cycle(
 DECLARE
     current_global_ids INT[];
     current_global_scores result_score_pair[];
-    new_global_score NUMERIC(5, 2);
+    new_global_score NUMERIC(6, 2);
     player_exists BOOLEAN;
     i INT;
-    temp_score RECORD;
+    temp_score NUMERIC(6, 2);
 BEGIN
     -- Check if this is the first result for this player.
     -- If it is, create a new row and get out.
@@ -236,15 +241,17 @@ BEGIN
     current_global_ids := array_remove(current_global_ids, NULL);
 
     -- Get the current "global" scores from the corresponding result IDs.
-    FOR i in 1..array_length(current_global_ids, 1) LOOP
-        SELECT es.main_score
-            INTO temp_score
-            FROM event_scores_2025_cycle es
-            WHERE es.result_id = current_global_ids[i];
+    IF array_length(current_global_ids, 1) IS NOT NULL THEN
+        FOR i in 1..array_length(current_global_ids, 1) LOOP
+            temp_score := (SELECT es.main_score
+                           FROM event_scores_2025_cycle es
+                           WHERE es.result_id = current_global_ids[i]);
 
-        current_global_scores[i].result_id := current_global_ids[i];
-        current_global_scores[i].score := temp_score;
-    END LOOP;
+            current_global_scores[i].result_id := current_global_ids[i];
+            current_global_scores[i].score := temp_score;
+        END LOOP;
+    END IF;
+
 
     -- Get the new event's score
     SELECT es.main_score
@@ -253,7 +260,7 @@ BEGIN
         WHERE result_id = new_global_id;
 
     -- Append new result id + new score pair to array
-    current_global_scores := array_append(current_global_scores, (new_global_id, new_global_score));
+    current_global_scores := array_append(current_global_scores, (new_global_id, new_global_score)::result_score_pair);
 
     -- Sort by scores, descending order
     current_global_scores := ARRAY(
@@ -291,11 +298,11 @@ CREATE OR REPLACE FUNCTION compute_live_local_points_2025_cycle(
 DECLARE
     current_live_ids INT[];
     current_live_scores result_score_pair[];
-    new_live_score NUMERIC(5, 2);
+    new_live_score NUMERIC(6, 2);
     third_best_live_id INT;
     player_exists BOOLEAN;
     i INT;
-    temp_score RECORD;
+    temp_score NUMERIC(6, 2);
 BEGIN
     -- Check if this is the first result for this player.
     -- If it is, create a new row and get out.
@@ -322,10 +329,9 @@ BEGIN
 
     -- Get the current live scores from the corresponding result IDs
     FOR i in 1..array_length(current_live_ids, 1) LOOP
-        SELECT es.main_score
-            INTO temp_score
+        temp_score := (SELECT es.main_score
             FROM event_scores_2025_cycle es
-            WHERE es.result_id = current_live_ids[i];
+            WHERE es.result_id = current_live_ids[i]);
 
         current_live_scores[i].result_id := current_live_ids[i];
         current_live_scores[i].score := temp_score;
@@ -384,11 +390,11 @@ CREATE OR REPLACE FUNCTION compute_out_of_region_points_2025_cycle(
 DECLARE
     current_out_of_region_id INT;
     current_out_of_region_scores result_score_pair[];
-    new_out_of_region_score NUMERIC(5, 2);
+    new_out_of_region_score NUMERIC(6, 2);
     second_best_out_of_region_id INT;
     player_exists BOOLEAN;
     i INT;
-    temp_score RECORD;
+    temp_score NUMERIC(6, 2);
 BEGIN
     -- Check if this is the first result for this player.
     -- If it is, create a new row and get out.
@@ -398,30 +404,22 @@ BEGIN
         WHERE player_id = new_player_id
     ) INTO player_exists;
 
-    IF NOT player_exists THEN
-        INSERT INTO player_scores_2025_cycle (player_id, out_of_region_live)
-            VALUES (new_player_id, new_out_of_region_id);
-        RETURN;
-    END IF;
-
     -- Get current out of region ID
     SELECT ps.out_of_region_live
         INTO current_out_of_region_id
         FROM player_scores_2025_cycle ps
         WHERE ps.player_id = new_player_id;
 
-    -- If is NULL, we know there's no out of region event for that player. Insert the new one and get out
-    IF current_out_of_region_id IS NULL THEN
+    IF NOT player_exists OR current_out_of_region_id IS NULL THEN
         INSERT INTO player_scores_2025_cycle (player_id, out_of_region_live)
             VALUES (new_player_id, new_out_of_region_id);
         RETURN;
     END IF;
 
     -- Get the current out of region score from the corresponding result IDs
-    SELECT es.main_score
-        INTO temp_score
+    temp_score := (SELECT es.main_score
         FROM event_scores_2025_cycle es
-        WHERE es.result_id = current_out_of_region_id;
+        WHERE es.result_id = current_out_of_region_id);
 
     current_out_of_region_scores[1].result_id := current_out_of_region_id;
     current_out_of_region_scores[1].score := temp_score;
@@ -489,7 +487,6 @@ BEGIN
     END IF;
 
     PERFORM compute_tank_points_2025_cycle(new_player_id, new_event_id, new_result_id);
-
 END;
 $$ LANGUAGE plpgsql;
 
@@ -518,7 +515,7 @@ BEGIN
         FROM events
         WHERE id = new_event_id;
 
-    event_is_valid := event_is_valid_2025_cycle(result_event_end_date, event_player_count);
+    event_is_valid := event_is_valid_2025_cycle(result_event_end_date, event_player_count, new_event_id);
     event_is_out_of_region := event_is_out_of_region(result_player_region, result_event_region);
 
     IF event_is_valid THEN
