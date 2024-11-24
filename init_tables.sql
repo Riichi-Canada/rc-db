@@ -116,7 +116,7 @@ CREATE TABLE IF NOT EXISTS event_results (
 -- region Event scores
 CREATE TABLE IF NOT EXISTS event_scores_2025_cycle (
     id SERIAL PRIMARY KEY,
-    result_id INT NOT NULL REFERENCES event_results(id) ON DELETE CASCADE,
+    result_id INT UNIQUE NOT NULL REFERENCES event_results(id) ON DELETE CASCADE,
     main_score NUMERIC(6, 2) NOT NULL,
     tank_score NUMERIC(5, 2) NOT NULL
 );
@@ -125,7 +125,8 @@ CREATE TABLE IF NOT EXISTS event_scores_2025_cycle (
 -- region Player scores
 CREATE TABLE IF NOT EXISTS player_scores_2025_cycle(
     id SERIAL PRIMARY KEY,
-    player_id INT NOT NULL REFERENCES players(id),
+    player_id INT UNIQUE NOT NULL REFERENCES players(id),
+    total_score NUMERIC(6, 2),
     out_of_region_live INT REFERENCES event_results(id),
     other_live_1 INT REFERENCES event_results(id),
     other_live_2 INT REFERENCES event_results(id),

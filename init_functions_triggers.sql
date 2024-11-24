@@ -10,6 +10,7 @@ DROP FUNCTION IF EXISTS insert_event_score;
 DROP FUNCTION IF EXISTS compute_tank_points_2025_cycle;
 DROP FUNCTION IF EXISTS compute_new_player_score_2025_cycle;
 DROP FUNCTION IF EXISTS update_player_score_on_insert;
+DROP FUNCTION IF EXISTS update_player_score_total;
 DROP FUNCTION IF EXISTS compute_event_scores;
 DROP TYPE IF EXISTS result_score_pair;
 --endregion Drop existing data
@@ -529,6 +530,53 @@ BEGIN
     END IF;
 END;
 $$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION update_player_score_total(new_player_id INT)
+RETURNS VOID AS $$
+DECLARE
+    score_sum NUMERIC(10, 2) := 0;
+    temp_score NUMERIC(10, 2);
+    result_ids RECORD;
+BEGIN
+    SELECT ps.out_of_region_live, ps.other_live_1, ps.other_live_2, ps.any_event_1, ps.any_event_2,
+           ps.tank_1, ps.tank_2, ps.tank_3, ps.tank_4, ps.tank_5
+        INTO result_ids
+        FROM player_scores_2025_cycle ps
+        WHERE player_id = new_player_id;
+
+    FOR temp_score IN
+        SELECT COALESCE(es.main_score, 0)
+        FROM event_scores_2025_cycle es
+        WHERE es.result_id = ANY(ARRAY[
+            result_ids.out_of_region_live,
+            result_ids.other_live_1,
+            result_ids.other_live_2,
+            result_ids.any_event_1,
+            result_ids.any_event_2
+        ])
+    LOOP
+        score_sum := score_sum + temp_score;
+    END LOOP;
+
+    FOR temp_score IN
+        SELECT COALESCE(es.tank_score, 0)
+        FROM event_scores_2025_cycle es
+        WHERE es.result_id = ANY(ARRAY[
+            result_ids.tank_1,
+            result_ids.tank_2,
+            result_ids.tank_3,
+            result_ids.tank_4,
+            result_ids.tank_5
+        ])
+    LOOP
+        score_sum := score_sum + temp_score;
+    END LOOP;
+
+    UPDATE player_scores_2025_cycle
+        SET total_score = score_sum
+        WHERE player_id = new_player_id;
+END;
+$$ LANGUAGE plpgsql;
 -- endregion Player scores
 
 CREATE OR REPLACE FUNCTION compute_event_scores()
@@ -536,6 +584,7 @@ RETURNS TRIGGER AS $$
     BEGIN
         PERFORM insert_event_score(NEW.id, NEW.event_id, NEW.placement);
         PERFORM update_player_score_on_insert(NEW.id, NEW.player_id, NEW.event_id);
+        PERFORM update_player_score_total(NEW.player_id);
         RETURN NEW;
     END;
 $$ LANGUAGE plpgsql;
