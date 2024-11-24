@@ -1,16 +1,11 @@
 BEGIN;
 
 --region Drop existing data
-DROP TRIGGER IF EXISTS before_insert_event ON events;
-DROP FUNCTION IF EXISTS generate_event_id;
-DROP TABLE IF EXISTS event_id_sequences CASCADE;
-DROP TRIGGER IF EXISTS after_event_result_insert ON event_results;
-DROP FUNCTION IF EXISTS insert_event_score;
-
 DROP TABLE IF EXISTS event_types CASCADE;
 DROP TABLE IF EXISTS regions CASCADE;
 DROP TABLE IF EXISTS clubs CASCADE;
 DROP TABLE IF EXISTS events CASCADE;
+DROP TABLE IF EXISTS event_id_sequences CASCADE;
 DROP TABLE IF EXISTS players CASCADE;
 DROP TABLE IF EXISTS event_results CASCADE;
 DROP TABLE IF EXISTS event_scores_2025_cycle CASCADE;
