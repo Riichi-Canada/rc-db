@@ -63,7 +63,7 @@ VALUES
     ('Club Riichi de Montréal', 'CRM'),
     ('Toronto Riichi Club', 'TORI'),
     ('University of British Columbia Mahjong Club', 'UBC Mahjong'),
-    ('Gatineau-Ottawa Riichi', 'GO Riichi');
+    ('Capital Riichi Club', 'CRC');
 --endregion Clubs
 
 --region Events
@@ -104,12 +104,13 @@ CREATE TABLE IF NOT EXISTS players (
 CREATE TABLE IF NOT EXISTS event_results (
     id SERIAL PRIMARY KEY,
     event_id INT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-    player_id INT REFERENCES players(id) ON DELETE CASCADE,
+    player_id INT REFERENCES players(id),
     player_first_name TEXT NOT NULL,
     player_last_name TEXT NOT NULL,
     placement INT NOT NULL,
     score NUMERIC(10, 2),
-    UNIQUE (event_id, player_id)
+    UNIQUE (event_id, player_id),
+    UNIQUE (event_id, placement)
 );
 --endregion Event results
 

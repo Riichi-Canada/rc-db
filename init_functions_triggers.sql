@@ -100,6 +100,24 @@ END;
 $$ LANGUAGE plpgsql;
 -- endregion Event scores
 
+-- region Placement check
+
+CREATE OR REPLACE FUNCTION check_placement()
+RETURNS TRIGGER AS $$
+DECLARE
+    num_players INT;
+BEGIN
+    SELECT number_of_players INTO num_players FROM events WHERE id = NEW.event_id;
+
+    IF NEW.placement > num_players THEN
+        RAISE EXCEPTION 'Placement % cannot be greater than number of players %', NEW.placement, num_players;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+-- endregion Placement check
+
 -- region Player scores
 CREATE TYPE result_score_pair AS (
     result_id INT,
@@ -630,6 +648,11 @@ CREATE TRIGGER before_insert_event
     BEFORE INSERT ON events
     FOR EACH ROW
     EXECUTE FUNCTION generate_event_id();
+
+CREATE TRIGGER placement_check
+    BEFORE INSERT OR UPDATE ON event_results
+    FOR EACH ROW
+    EXECUTE FUNCTION check_placement();
 
 CREATE TRIGGER after_event_result_insert
     AFTER INSERT ON event_results
