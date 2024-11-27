@@ -53,6 +53,24 @@ END;
 $$ LANGUAGE plpgsql;
 -- endregion Event IDs
 
+-- region Placement check
+
+CREATE OR REPLACE FUNCTION check_placement()
+    RETURNS TRIGGER AS $$
+DECLARE
+    num_players INT;
+BEGIN
+    SELECT number_of_players INTO num_players FROM events WHERE id = NEW.event_id;
+
+    IF NEW.placement > num_players THEN
+        RAISE EXCEPTION 'Placement % cannot be greater than number of players %', NEW.placement, num_players;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+-- endregion Placement check
+
 -- region Event scores
 
 CREATE OR REPLACE FUNCTION insert_event_scores_2025_cycle(new_result_id INT, new_event_id INT, placement INT)
@@ -94,29 +112,16 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION insert_event_scores(new_result_id INT, new_event_id INT, placement INT)
 RETURNS VOID AS $$
+DECLARE
+    end_date DATE;
 BEGIN
-    PERFORM insert_event_scores_2025_cycle(new_result_id, new_event_id, placement);
+    SELECT event_end_date INTO end_date FROM events WHERE event_id = new_event_id;
+    IF end_date BETWEEN '2022-01-01'::DATE AND '2024-12-31'::DATE THEN
+        PERFORM insert_event_scores_2025_cycle(new_result_id, new_event_id, placement);
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 -- endregion Event scores
-
--- region Placement check
-
-CREATE OR REPLACE FUNCTION check_placement()
-RETURNS TRIGGER AS $$
-DECLARE
-    num_players INT;
-BEGIN
-    SELECT number_of_players INTO num_players FROM events WHERE id = NEW.event_id;
-
-    IF NEW.placement > num_players THEN
-        RAISE EXCEPTION 'Placement % cannot be greater than number of players %', NEW.placement, num_players;
-    END IF;
-
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
--- endregion Placement check
 
 -- region Player scores
 CREATE TYPE result_score_pair AS (
