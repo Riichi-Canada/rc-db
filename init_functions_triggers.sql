@@ -1,23 +1,30 @@
 BEGIN;
 
 --region Drop existing data
+DROP TYPE IF EXISTS result_score_pair;
+
 DROP TRIGGER IF EXISTS before_insert_event ON events;
-DROP FUNCTION IF EXISTS generate_event_id;
 DROP TRIGGER IF EXISTS after_event_result_insert ON event_results;
+
+DROP FUNCTION IF EXISTS generate_event_id;
 DROP FUNCTION IF EXISTS event_is_valid_2025_cycle;
 DROP FUNCTION IF EXISTS event_is_out_of_region;
-DROP FUNCTION IF EXISTS insert_event_score;
 DROP FUNCTION IF EXISTS compute_tank_points_2025_cycle;
+DROP FUNCTION IF EXISTS compute_global_points_2025_cycle;
+DROP FUNCTION IF EXISTS compute_live_local_points_2025_cycle;
+DROP FUNCTION IF EXISTS compute_out_of_region_points_2025_cycle;
 DROP FUNCTION IF EXISTS compute_new_player_score_2025_cycle;
+DROP FUNCTION IF EXISTS insert_event_scores;
+DROP FUNCTION IF EXISTS insert_event_scores_2025_cycle;
 DROP FUNCTION IF EXISTS update_player_score_on_insert;
 DROP FUNCTION IF EXISTS update_player_score_total;
 DROP FUNCTION IF EXISTS compute_event_scores;
-DROP TYPE IF EXISTS result_score_pair;
 --endregion Drop existing data
 
 -- region Event IDs
 
-CREATE OR REPLACE FUNCTION generate_event_id() RETURNS trigger as $$
+CREATE OR REPLACE FUNCTION generate_event_id()
+RETURNS TRIGGER AS $$
 DECLARE
     year_part TEXT;
     type_part TEXT;
@@ -44,16 +51,11 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-
-CREATE TRIGGER before_insert_event
-    BEFORE INSERT ON events
-    FOR EACH ROW
-    EXECUTE FUNCTION generate_event_id();
 -- endregion Event IDs
 
 -- region Event scores
 
-CREATE OR REPLACE FUNCTION insert_event_score(new_result_id INT, new_event_id INT, placement INT)
+CREATE OR REPLACE FUNCTION insert_event_scores_2025_cycle(new_result_id INT, new_event_id INT, placement INT)
 RETURNS VOID AS $$
 DECLARE
     num_of_players INT;
@@ -73,20 +75,27 @@ BEGIN
     q2s := (fsb - 100) * 0.5 / (FLOOR(0.5 * num_of_players - 1) - (FLOOR(0.25 * num_of_players - 1)));
     qsize := FLOOR(num_of_players / 4);
     tank_points := CASE
-                WHEN placement > (num_of_players / 2) THEN 0
-                ELSE LEAST(
-                    200,
-                    fsb - (LEAST(placement, qsize) - 1) * q1s
-                    - CASE
-                        WHEN placement > qsize THEN (placement - qsize) * q2s
-                        ELSE 0
-                      END
-                )
-             END;
+                       WHEN placement > (num_of_players / 2) THEN 0
+                       ELSE LEAST(
+                        200,
+                        fsb - (LEAST(placement, qsize) - 1) * q1s
+                            - CASE
+                                  WHEN placement > qsize THEN (placement - qsize) * q2s
+                                  ELSE 0
+                            END
+                        )
+                   END;
     tank_points := ROUND(tank_points, 2);
 
     INSERT INTO event_scores_2025_cycle (result_id, main_score, tank_score)
     VALUES (new_result_id, main_points, tank_points);
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION insert_event_scores(new_result_id INT, new_event_id INT, placement INT)
+RETURNS VOID AS $$
+BEGIN
+    PERFORM insert_event_scores_2025_cycle(new_result_id, new_event_id, placement);
 END;
 $$ LANGUAGE plpgsql;
 -- endregion Event scores
@@ -109,29 +118,28 @@ BEGIN
 
     eventtype := (SELECT event_type FROM events WHERE id = new_event_id);
 
-    IF (end_date >= period_start_date
-            AND end_date <= period_end_date
-            AND (num_of_players >= 24 OR eventtype = 2)) THEN
-        RETURN TRUE;
-    ELSE
-        RETURN FALSE;
-    END IF;
+    -- 24 player limit does not apply to league events (CWL)
+    RETURN (end_date >= period_start_date
+        AND end_date <= period_end_date
+        AND (num_of_players >= 24 OR eventtype = 2));
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION event_is_valid(end_date DATE, num_of_players INT, new_event_id INT)
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN event_is_valid_2025_cycle(end_date, num_of_players, new_event_id);
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION event_is_out_of_region(event_region INT, player_region INT)
 RETURNS BOOLEAN AS $$
 BEGIN
-    IF event_region <> player_region
+    RETURN event_region <> player_region
         AND NOT (  -- Québec and Ontario are considered to be in the same region for this purpose
             (event_region = 1 AND player_region = 2)
             OR (event_region = 2 AND player_region = 1)
-        )
-    THEN
-        RETURN TRUE;
-    ELSE
-        RETURN FALSE;
-    END IF;
+        );
 END;
 $$ LANGUAGE plpgsql;
 
@@ -252,7 +260,6 @@ BEGIN
             current_global_scores[i].score := temp_score;
         END LOOP;
     END IF;
-
 
     -- Get the new event's score
     SELECT es.main_score
@@ -491,6 +498,27 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION compute_new_player_score(
+    is_out_of_region BOOLEAN,
+    is_online BOOLEAN,
+    new_player_id INT,
+    new_event_id INT,
+    new_result_id INT
+)
+RETURNS VOID AS $$
+BEGIN
+    PERFORM compute_new_player_score_2025_cycle(
+            is_out_of_region,
+            is_online,
+            new_player_id,
+            new_event_id,
+            new_result_id
+    );
+
+    PERFORM update_player_score_total(new_player_id);
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION update_player_score_on_insert(new_result_id INT, new_player_id INT, new_event_id INT)
 RETURNS VOID AS $$
 DECLARE
@@ -502,6 +530,7 @@ DECLARE
     event_is_valid BOOLEAN;
     event_is_out_of_region BOOLEAN;
 BEGIN
+    -- Not a registered canadian player (no ID)
     IF new_player_id IS NULL THEN
         RETURN;
     END IF;
@@ -516,11 +545,11 @@ BEGIN
         FROM events
         WHERE id = new_event_id;
 
-    event_is_valid := event_is_valid_2025_cycle(result_event_end_date, event_player_count, new_event_id);
+    event_is_valid := event_is_valid(result_event_end_date, event_player_count, new_event_id);
     event_is_out_of_region := event_is_out_of_region(result_player_region, result_event_region);
 
     IF event_is_valid THEN
-        PERFORM compute_new_player_score_2025_cycle(
+        PERFORM compute_new_player_score(
             event_is_out_of_region,
             event_is_online,
             new_player_id,
@@ -531,8 +560,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE FUNCTION update_player_score_total(new_player_id INT)
-RETURNS VOID AS $$
+CREATE OR REPLACE FUNCTION update_player_score_total_2025_cycle(new_player_id INT)
+    RETURNS VOID AS $$
 DECLARE
     score_sum NUMERIC(10, 2) := 0;
     temp_score NUMERIC(10, 2);
@@ -553,10 +582,10 @@ BEGIN
             result_ids.other_live_2,
             result_ids.any_event_1,
             result_ids.any_event_2
-        ])
-    LOOP
-        score_sum := score_sum + temp_score;
-    END LOOP;
+            ])
+        LOOP
+            score_sum := score_sum + temp_score;
+        END LOOP;
 
     FOR temp_score IN
         SELECT COALESCE(es.tank_score, 0)
@@ -567,14 +596,21 @@ BEGIN
             result_ids.tank_3,
             result_ids.tank_4,
             result_ids.tank_5
-        ])
-    LOOP
-        score_sum := score_sum + temp_score;
-    END LOOP;
+            ])
+        LOOP
+            score_sum := score_sum + temp_score;
+        END LOOP;
 
     UPDATE player_scores_2025_cycle
         SET total_score = score_sum
         WHERE player_id = new_player_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION update_player_score_total(new_player_id INT)
+RETURNS VOID AS $$
+BEGIN
+    PERFORM update_player_score_total_2025_cycle(new_player_id);
 END;
 $$ LANGUAGE plpgsql;
 -- endregion Player scores
@@ -582,16 +618,90 @@ $$ LANGUAGE plpgsql;
 CREATE OR REPLACE FUNCTION compute_event_scores()
 RETURNS TRIGGER AS $$
     BEGIN
-        PERFORM insert_event_score(NEW.id, NEW.event_id, NEW.placement);
+        PERFORM insert_event_scores(NEW.id, NEW.event_id, NEW.placement);
         PERFORM update_player_score_on_insert(NEW.id, NEW.player_id, NEW.event_id);
-        PERFORM update_player_score_total(NEW.player_id);
         RETURN NEW;
     END;
 $$ LANGUAGE plpgsql;
+
+-- region Triggers
+
+CREATE TRIGGER before_insert_event
+    BEFORE INSERT ON events
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_event_id();
 
 CREATE TRIGGER after_event_result_insert
     AFTER INSERT ON event_results
     FOR EACH ROW
     EXECUTE FUNCTION compute_event_scores();
+-- endregion Triggers
+
+-- region Documentation comments
+COMMENT ON TYPE result_score_pair IS
+    $s$Dict-like object type to make data manipulation simpler in certain procedures.$s$;
+
+COMMENT ON FUNCTION generate_event_id() IS
+    $s$Generates a textual event ID of format YYYY-XXNNNN, where YYYY is the year the event took place, XX is the type
+    (ex. 01 for tournament, 02 for league) and NNNN is a serial number.$s$;
+
+COMMENT ON FUNCTION compute_event_scores IS
+    'Calls the necessary functions to compute and update event scores for each new result.';
+
+COMMENT ON FUNCTION insert_event_scores IS
+    $s$Computes an event's scores (for player rankings) and inserts them into the relevant event_scores table.$s$;
+
+COMMENT ON FUNCTION insert_event_scores_2025_cycle IS
+    $s$Computes an event's scores (for player rankings) and inserts them into the event_scores_2025_cycle table.$s$;
+
+COMMENT ON FUNCTION update_player_score_on_insert IS
+    $s$Check if the event is valid to be used in the ranking. If yes, compute the new score and insert it into that
+    player's scores list if it beats any current ones.$s$;
+
+COMMENT ON FUNCTION event_is_valid
+    IS $s$Returns a boolean indicating if an event is valid to be used in the ranking.$s$;
+
+COMMENT ON FUNCTION event_is_valid_2025_cycle
+    IS $s$Returns a boolean indicating if an event is valid to be used in the ranking for the 2025 cycle.$s$;
+
+COMMENT ON FUNCTION event_is_out_of_region
+    IS $s$Returns a boolean indicating if an event is out of the given player's region.$s$;
+
+COMMENT ON FUNCTION compute_new_player_score
+    IS $s$Checks if the player's new score beats any of their old scores. If yes, update the player's scores list.$s$;
+
+COMMENT ON FUNCTION compute_new_player_score_2025_cycle IS
+    $s$Checks if the player's new score beats any of their old scores for the 2025 cycle.
+    If yes, update the player's scores list.$s$;
+
+COMMENT ON FUNCTION compute_out_of_region_points_2025_cycle IS
+    $s$Checks if the new score beats the player's current best out of region score for the 2025 cycle.
+    If yes, update the player's scores list accordingly.$s$;
+
+COMMENT ON FUNCTION compute_live_local_points_2025_cycle IS
+    $s$Checks if the new score beats one of the player's current best live, non-out of region scores for the 2025 cycle.
+    If yes, update the player's scores list accordingly.$s$;
+
+COMMENT ON FUNCTION compute_global_points_2025_cycle IS
+    $s$Checks if the new score beats one of the player's current best "any event" scores for the 2025 cycle.
+    If yes, update the player's scores list accordingly.$s$;
+
+COMMENT ON FUNCTION compute_tank_points_2025_cycle IS
+    $s$Checks if the new score beats one of the player's current best tank scores for the 2025 cycle.
+    If yes, update the player's scores list accordingly.$s$;
+
+COMMENT ON FUNCTION update_player_score_total
+    IS $s$Updates the specified player's score total.$s$;
+
+COMMENT ON FUNCTION update_player_score_total_2025_cycle
+    IS $s$Updates the specified player's score total for the 2025 cycle.$s$;
+
+COMMENT ON TRIGGER after_event_result_insert ON event_results IS
+    $s$Calls the functions to calculate an event's scores for each placement,
+    and to add these scores to player rankings.$s$;
+
+COMMENT ON TRIGGER before_insert_event ON events IS
+    'Calls the function to generate the textual event ID every time a new event is added to the data.';
+-- endregion Documentation comments
 
 COMMIT;
