@@ -10,6 +10,15 @@ DROP TABLE IF EXISTS players CASCADE;
 DROP TABLE IF EXISTS event_results CASCADE;
 DROP TABLE IF EXISTS event_scores_2025_cycle CASCADE;
 DROP TABLE IF EXISTS player_scores_2025_cycle CASCADE;
+
+DROP TABLE IF EXISTS event_types_log;
+DROP TABLE IF EXISTS regions_log;
+DROP TABLE IF EXISTS clubs_log;
+DROP TABLE IF EXISTS events_log;
+DROP TABLE IF EXISTS players_log;
+DROP TABLE IF EXISTS event_results_log;
+DROP TABLE IF EXISTS event_scores_2025_cycle_log;
+DROP TABLE IF EXISTS player_scores_2025_cycle_log;
 --endregion Drop existing data
 
 --region Event types
@@ -20,6 +29,13 @@ CREATE TABLE IF NOT EXISTS event_types (
 
 INSERT INTO event_types (event_type)
 VALUES ('Tournament'), ('League');
+
+CREATE TABLE IF NOT EXISTS event_types_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
+);
 --endregion Event types
 
 --region Regions
@@ -49,6 +65,13 @@ VALUES
     ('Oceania'),
     ('South America'),
     ('Other');
+
+CREATE TABLE IF NOT EXISTS regions_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
+);
 --endregion Regions
 
 --region Clubs
@@ -64,6 +87,13 @@ VALUES
     ('Toronto Riichi Club', 'TORI'),
     ('University of British Columbia Mahjong Club', 'UBC Mahjong'),
     ('Capital Riichi Club', 'CRC');
+
+CREATE TABLE IF NOT EXISTS clubs_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
+);
 --endregion Clubs
 
 --region Events
@@ -79,6 +109,13 @@ CREATE TABLE IF NOT EXISTS events (
     event_country TEXT NOT NULL,
     number_of_players INT NOT NULL,
     is_online BOOLEAN NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS events_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
 );
 
 CREATE TABLE IF NOT EXISTS event_id_sequences (
@@ -98,6 +135,13 @@ CREATE TABLE IF NOT EXISTS players (
     player_club INT REFERENCES clubs(id),
     player_score_2025_cycle NUMERIC(6, 2)
 );
+
+CREATE TABLE IF NOT EXISTS players_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
+);
 --endregion Players
 
 --region Event results
@@ -112,6 +156,13 @@ CREATE TABLE IF NOT EXISTS event_results (
     UNIQUE (event_id, player_id),
     UNIQUE (event_id, placement)
 );
+
+CREATE TABLE IF NOT EXISTS event_results_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
+);
 --endregion Event results
 
 -- region Event scores
@@ -120,6 +171,13 @@ CREATE TABLE IF NOT EXISTS event_scores_2025_cycle (
     result_id INT UNIQUE NOT NULL REFERENCES event_results(id) ON DELETE CASCADE,
     main_score NUMERIC(6, 2) NOT NULL,
     tank_score NUMERIC(5, 2) NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_scores_2025_cycle_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
 );
 -- endregion Event scores
 
@@ -138,6 +196,13 @@ CREATE TABLE IF NOT EXISTS player_scores_2025_cycle(
     tank_3 INT REFERENCES event_results(id),
     tank_4 INT REFERENCES event_results(id),
     tank_5 INT REFERENCES event_results(id)
+);
+
+CREATE TABLE IF NOT EXISTS player_scores_2025_cycle_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
 );
 -- endregion Player scores
 
