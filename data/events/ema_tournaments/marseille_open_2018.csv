@@ -1,0 +1,2 @@
+event_name,event_region,event_type,event_start_date,event_end_date,event_city,event_country,number_of_players,is_online
+Marseille Open 2018,15,1,2018-06-23,2018-06-24,Marseille,France,44,FALSE

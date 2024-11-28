@@ -393,16 +393,16 @@ BEGIN
         WHERE player_id = new_player_id
     ) INTO player_exists;
 
-    SELECT ps.out_of_region_live
-        INTO current_out_of_region_id
-        FROM player_scores_2025_cycle ps
-        WHERE ps.player_id = new_player_id;
-
-    IF NOT player_exists OR current_out_of_region_id IS NULL THEN
+    IF NOT player_exists THEN
         INSERT INTO player_scores_2025_cycle (player_id, out_of_region_live)
             VALUES (new_player_id, new_out_of_region_id);
         RETURN;
     END IF;
+
+    SELECT ps.out_of_region_live
+        INTO current_out_of_region_id
+        FROM player_scores_2025_cycle ps
+        WHERE ps.player_id = new_player_id;
 
     temp_score := (SELECT es.main_score
         FROM event_scores_2025_cycle es

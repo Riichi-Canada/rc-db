@@ -1,0 +1,20 @@
+event_id,player_id,player_first_name,player_last_name,placement,score
+2018-010002,19,Lorenzo,Desrosiers,1,81800
+2018-010002,,Alexis,(last Name),2,67150
+2018-010002,,Steven,Smith,3,55350
+2018-010002,,Joseph,(last Name),4,-2600
+2018-010002,,Senechal,D,5,28650
+2018-010002,,Yann,(last Name),6,5350
+2018-010002,20,Claudel,Bilodeau,7,-9600
+2018-010002,18,Sébastien,Bouchard,8,-12000
+2018-010002,1,Loïc,Roberge,9,75900
+2018-010002,,Shan,K,10,42950
+2018-010002,,Ty,Kennedy,11,-19200
+2018-010002,,Estey,G,12,-28150
+2018-010002,,Patrick,M,13,-71050
+2018-010002,13,Anne,Rinfret,14,-77500
+2018-010002,,Kevin,B,15,-82850
+2018-010002,,Mathieu,C,-1,
+2018-010002,,Eva,(last Name),-2,
+2018-010002,,Carey,(last Name),-3,
+2018-010002,,Yanis,B,-4,

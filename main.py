@@ -7,25 +7,36 @@ from db_config import DB_NAME, DB_HOST, DB_USER, DB_PASSWORD
 DATABASE_PATH = f'postgresql+psycopg2://{DB_USER}:{DB_PASSWORD}@{DB_HOST}/{DB_NAME}'
 
 
+def get_event_paths(data_dir_path: str) -> list[str]:
+    paths = []
+
+    for root, dirs, files in os.walk(data_dir_path):
+        for file in files:
+            if file.endswith('.csv') and not file.endswith('_results.csv'):
+                paths.append(os.path.join(root, file))
+
+    return paths
+
+
+def get_event_results_paths(data_dir_path: str) -> list[str]:
+    paths = []
+
+    for root, dirs, files in os.walk(data_dir_path):
+        for file in files:
+            if file.endswith('_results.csv'):
+                paths.append(os.path.join(root, file))
+
+    return paths
+
+
 def import_all_data() -> None:
     """
     Imports data for all players, events and event results from CSV files into the database.
     """
 
     PLAYERS_CSV_PATH = './data/players/players.csv'
-    EVENT_PATHS = [
-        './data/events/montreal_riichi_open/mro_2023.csv',
-        './data/events/montreal_riichi_open/mro_2024.csv',
-        './data/events/cwl/2023/cwl_fall_2023.csv',
-        './data/events/cwl/2024/cwl_spring_2024.csv',
-        './data/events/cwl/2024/cwl_fall_2024.csv'
-    ]
-    EVENT_RESULTS_PATHS = [
-        './data/events/montreal_riichi_open/mro_2023_results.csv',
-        './data/events/montreal_riichi_open/mro_2024_results.csv',
-        './data/events/cwl/2023/cwl_fall_2023_results.csv',
-        './data/events/cwl/2024/cwl_spring_2024_results.csv',
-    ]
+    EVENT_PATHS = get_event_paths(data_dir_path='./data/events')
+    EVENT_RESULTS_PATHS = get_event_results_paths(data_dir_path='./data/events')
 
     print("Importing players...")
     import_player_data(csv_path=PLAYERS_CSV_PATH, db_path=DATABASE_PATH)
