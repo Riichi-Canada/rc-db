@@ -7,28 +7,37 @@ DROP TRIGGER IF EXISTS before_insert_event ON events;
 DROP TRIGGER IF EXISTS placement_check ON event_results;
 DROP TRIGGER IF EXISTS after_event_result_insert ON event_results;
 
-DROP FUNCTION IF EXISTS generate_event_id;
+DROP FUNCTION IF EXISTS generate_event_code;
 DROP FUNCTION IF EXISTS check_placement;
 DROP FUNCTION IF EXISTS event_is_valid;
 DROP FUNCTION IF EXISTS event_is_valid_2025_cycle;
+DROP FUNCTION IF EXISTS event_is_valid_2028_cycle;
 DROP FUNCTION IF EXISTS event_is_out_of_region;
+DROP FUNCTION IF EXISTS event_is_canadian;
 DROP PROCEDURE IF EXISTS compute_tank_points_2025_cycle;
 DROP PROCEDURE IF EXISTS compute_global_points_2025_cycle;
 DROP PROCEDURE IF EXISTS compute_live_local_points_2025_cycle;
 DROP PROCEDURE IF EXISTS compute_out_of_region_points_2025_cycle;
+DROP PROCEDURE IF EXISTS compute_slot_1_2028_cycle;
+DROP PROCEDURE IF EXISTS compute_slot_2_2028_cycle;
+DROP PROCEDURE IF EXISTS compute_slots_3_4_2028_cycle;
+DROP PROCEDURE IF EXISTS compute_slot_5_2028_cycle;
 DROP PROCEDURE IF EXISTS compute_new_player_score;
 DROP PROCEDURE IF EXISTS compute_new_player_score_2025_cycle;
+DROP PROCEDURE IF EXISTS compute_new_player_score_2028_cycle;
 DROP PROCEDURE IF EXISTS insert_event_scores;
 DROP PROCEDURE IF EXISTS insert_event_scores_2025_cycle;
+DROP PROCEDURE IF EXISTS insert_event_scores_2028_cycle;
 DROP PROCEDURE IF EXISTS update_player_score_on_insert;
 DROP PROCEDURE IF EXISTS update_player_score_total;
 DROP PROCEDURE IF EXISTS update_player_score_total_2025_cycle;
+DROP PROCEDURE IF EXISTS update_player_score_total_2028_cycle;
 DROP FUNCTION IF EXISTS compute_event_scores;
 --endregion Drop existing data
 
--- region Event IDs
+-- region Event codes
 
-CREATE OR REPLACE FUNCTION generate_event_id()
+CREATE OR REPLACE FUNCTION generate_event_code()
 RETURNS TRIGGER AS $$
 DECLARE
     year_part TEXT;
@@ -38,17 +47,17 @@ BEGIN
     year_part := TO_CHAR(NEW.event_start_date, 'YYYY');
     type_part := LPAD(NEW.event_type::TEXT, 2, '0');
 
-    UPDATE event_id_sequences
+    UPDATE event_code_sequences
         SET current_number = current_number + 1
         WHERE year = EXTRACT(YEAR FROM NEW.event_start_date)::INT AND event_type = NEW.event_type;
 
     IF NOT FOUND THEN
-        INSERT INTO event_id_sequences (year, event_type, current_number)
+        INSERT INTO event_code_sequences (year, event_type, current_number)
         VALUES (EXTRACT(YEAR FROM NEW.event_start_date)::INT, NEW.event_type, 1);
     END IF;
 
     SELECT LPAD(current_number::TEXT, 4, '0') INTO number_part
-        FROM event_id_sequences
+        FROM event_code_sequences
         WHERE year = EXTRACT(YEAR FROM NEW.event_start_date)::INT AND event_type = NEW.event_type;
 
     NEW.event_id := year_part || '-' || type_part || number_part;
@@ -56,7 +65,7 @@ BEGIN
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
--- endregion Event IDs
+-- endregion Event codes
 
 -- region Placement check
 
@@ -115,6 +124,46 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE PROCEDURE insert_event_scores_2028_cycle(new_result_id INT, new_event_id INT, placement INT)
+AS $$
+DECLARE
+    num_of_players INT;
+    min_number_of_players INT := 16;
+
+    part_A_points NUMERIC(6, 2);
+    size_scaling_multiplier NUMERIC(6, 5);
+    maximum_multiplier NUMERIC := 1.25;
+
+    part_B_points NUMERIC(5, 2);
+    top_percentage NUMERIC(5, 2);
+BEGIN
+    SELECT e.number_of_players INTO num_of_players FROM events e WHERE id = new_event_id;
+
+    part_A_points := ROUND(1000 * (num_of_players - placement) / (num_of_players - 1), 2);
+    IF num_of_players > min_number_of_players THEN
+        size_scaling_multiplier := (num_of_players - min_number_of_players) * 0.00125 + 1;
+        part_A_points := part_A_points * LEAST(size_scaling_multiplier, maximum_multiplier);
+    END IF;
+
+    -- TODO This formula does not account for ties (half-stars etc.), fix it
+    top_percentage := placement::NUMERIC / num_of_players::NUMERIC;
+    IF num_of_players >= 32 and top_percentage <= 1.0/32.0 THEN
+        part_B_points := 200;
+    ELSIF top_percentage <= 1.0/16.0 THEN
+        part_B_points := 150;
+    ELSIF top_percentage <= 1.0/8.0 THEN
+        part_B_points := 100;
+    ELSIF top_percentage <= 1.0/4.0 THEN
+        part_B_points := 50;
+    ELSE
+        part_B_points := 0;
+    END IF;
+
+    INSERT INTO event_scores_2028_cycle (result_id, part_a, part_b)
+    VALUES (new_result_id, part_A_points, part_B_points);
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE PROCEDURE insert_event_scores(new_result_id INT, new_event_id INT, placement INT)
 AS $$
 DECLARE
@@ -124,6 +173,8 @@ BEGIN
 
     IF end_date BETWEEN '2022-01-01'::DATE AND '2024-12-31'::DATE THEN
         CALL insert_event_scores_2025_cycle(new_result_id, new_event_id, placement);
+    ELSIF end_date BETWEEN '2025-01-01'::DATE AND '2027-12-31'::DATE THEN
+        CALL insert_event_scores_2028_cycle(new_result_id, new_event_id, placement);
     END IF;
 END;
 $$ LANGUAGE plpgsql;
@@ -151,21 +202,58 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION event_is_valid_2028_cycle(end_date DATE, num_of_players INT)
+    RETURNS BOOLEAN AS $$
+DECLARE
+    period_start_date CONSTANT DATE := '2025-01-01'::DATE;
+    period_end_date CONSTANT DATE := '2027-12-31'::DATE;
+    min_num_of_participants INT := 16;
+BEGIN
+    RETURN (end_date >= period_start_date
+        AND end_date <= period_end_date
+        AND num_of_players >= min_num_of_participants);
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION event_is_valid(end_date DATE, num_of_players INT, new_event_id INT)
 RETURNS BOOLEAN AS $$
 BEGIN
-    RETURN event_is_valid_2025_cycle(end_date, num_of_players, new_event_id);
+    IF end_date BETWEEN '2022-01-01'::DATE AND '2024-12-31'::DATE THEN
+        RETURN event_is_valid_2025_cycle(end_date, num_of_players, new_event_id);
+    ELSIF end_date BETWEEN '2025-01-01'::DATE AND '2027-12-31'::DATE THEN
+        RETURN event_is_valid_2028_cycle(end_date, num_of_players);
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION event_is_out_of_region(event_region INT, player_region INT)
 RETURNS BOOLEAN AS $$
+DECLARE
+    quebec_regions INT[] := ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9];
+    ontario_regions INT[] := ARRAY[10, 11, 12, 13];
 BEGIN
     RETURN event_region <> player_region
+        AND NOT event_region IS NULL
         AND NOT (  -- Québec and Ontario are considered to be in the same region for this purpose
-            (event_region = 1 AND player_region = 2)
-            OR (event_region = 2 AND player_region = 1)
+            (event_region = ANY(quebec_regions) AND player_region = ANY(ontario_regions))
+            OR (event_region = ANY(ontario_regions) AND player_region = ANY(quebec_regions))
         );
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE FUNCTION event_is_canadian(result_id INT)
+RETURNS BOOLEAN AS $$
+DECLARE
+    -- Regions 1 to this number are in Canada. Regions with a higher number are outside of Canada.
+    num_of_canadian_regions INT := 26;
+    new_event_region INT;
+    is_canadian BOOLEAN;
+BEGIN
+    SELECT e.event_region INTO new_event_region FROM events e
+    JOIN event_results er ON e.id = er.event_id
+    WHERE er.id = result_id;
+
+    is_canadian := new_event_region <= num_of_canadian_regions;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -439,6 +527,272 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE PROCEDURE compute_slot_5_2028_cycle(new_player_id INT, new_global_result_id INT)
+AS $$
+DECLARE
+    current_global_scores result_score_pair[];
+    current_global_result_id INT;
+    current_global_result_score NUMERIC(6, 2);
+    new_global_result_score NUMERIC(6, 2);
+    player_exists BOOLEAN;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1
+        FROM player_scores_2028_cycle
+        WHERE player_id = new_player_id
+    ) INTO player_exists;
+
+    -- Player has not played in other events before, so this new result is their best.
+    -- Write it into the data immediately and exit the function.
+    IF NOT player_exists THEN
+        INSERT INTO player_scores_2028_cycle (player_id, slot_5)
+        VALUES (new_player_id, new_global_result_id);
+        RETURN;
+    END IF;
+
+    -- Get current slot 5 data
+    SELECT ps.slot_5
+    INTO current_global_result_id
+    FROM player_scores_2028_cycle ps
+    WHERE ps.player_id = new_player_id;
+
+    current_global_result_score := (
+        SELECT SUM(es.part_a + es.part_b) AS score
+        FROM event_scores_2028_cycle es
+        WHERE es.result_id = current_global_result_id
+    );
+
+    current_global_scores := array_append(
+            current_global_scores, (current_global_result_id, current_global_result_score)::result_score_pair
+                             );
+
+    -- Get new result data
+    SELECT SUM(es.part_a + es.part_b) AS score
+    INTO new_global_result_score
+    FROM event_scores_2028_cycle es
+    WHERE result_id = new_global_result_id;
+
+    current_global_scores := array_append(
+            current_global_scores, (new_global_result_id, new_global_result_score)::result_score_pair
+                             );
+
+    -- Order new result and old result by score, save the highest
+    current_global_scores := ARRAY(
+            SELECT t FROM unnest(current_global_scores) AS t
+            ORDER BY t.score DESC
+                             );
+
+    UPDATE player_scores_2028_cycle
+    SET slot_5 = current_global_scores[1].result_id
+    WHERE player_id = new_player_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE compute_slots_3_4_2028_cycle(new_player_id INT, new_live_result_id INT)
+AS $$
+DECLARE
+    current_live_ids INT[];
+    current_live_scores result_score_pair[];
+    new_live_score NUMERIC(6, 2);
+    third_best_live_id INT;
+    i INT;
+    temp_score NUMERIC(6, 2);
+BEGIN
+    -- Get current slot 3-4 data
+    SELECT ARRAY[ps.slot_3, ps.slot_4]
+    INTO current_live_ids
+    FROM player_scores_2028_cycle ps
+    WHERE ps.player_id = new_player_id;
+
+    current_live_ids := array_remove(current_live_ids, NULL);
+
+    IF array_length(current_live_ids, 1) IS NOT NULL THEN
+        FOR i in 1..array_length(current_live_ids, 1) LOOP
+                temp_score := (SELECT SUM(es.part_a + es.part_b) AS score
+                               FROM event_scores_2028_cycle es
+                               WHERE es.result_id = current_live_ids[i]);
+
+                current_live_scores[i].result_id := current_live_ids[i];
+                current_live_scores[i].score := temp_score;
+            END LOOP;
+    END IF;
+
+    -- Get new result data
+    SELECT SUM(es.part_a + es.part_b) AS score
+    INTO new_live_score
+    FROM event_scores_2028_cycle es
+    WHERE result_id = new_live_result_id;
+
+    current_live_scores := array_append(current_live_scores, (new_live_result_id, new_live_score)::result_score_pair);
+
+    -- Order new result and old results by score, save the highest two and bump the new lowest to slot 5
+    current_live_scores := ARRAY(
+            SELECT t FROM unnest(current_live_scores) AS t
+            ORDER BY t.score DESC
+                           );
+
+    IF array_length(current_live_scores, 1) < 2 THEN
+        current_live_scores := array_append(current_live_scores, (NULL, NULL)::result_score_pair);
+    END IF;
+
+    IF array_length(current_live_scores, 1) > 2 THEN
+        -- Check the "leftover" result in case it beats results in a lower tier
+        third_best_live_id := current_live_scores[3].result_id;
+        CALL compute_slot_5_2028_cycle(
+                new_player_id,
+                third_best_live_id
+             );
+
+        current_live_scores := ARRAY(
+                SELECT t FROM unnest(current_live_scores) AS t
+                LIMIT 2
+                               );
+    END IF;
+
+    UPDATE player_scores_2028_cycle
+    SET
+        slot_3 = current_live_scores[1].result_id,
+        slot_4 = current_live_scores[2].result_id
+    WHERE player_id = new_player_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE compute_slot_2_2028_cycle(new_player_id INT, new_canadian_result_id INT)
+AS $$
+DECLARE
+    current_canadian_scores result_score_pair[];
+    current_canadian_result_id INT;
+    current_canadian_result_score NUMERIC(6, 2);
+    new_canadian_result_score NUMERIC(6, 2);
+    player_exists BOOLEAN;
+    second_best_canadian_result_id INT;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1
+        FROM player_scores_2028_cycle
+        WHERE player_id = new_player_id
+    ) INTO player_exists;
+
+    -- Player has not played in other events before, so this new result is their best.
+    -- Write it into the data immediately and exit the function.
+    IF NOT player_exists THEN
+        INSERT INTO player_scores_2028_cycle (player_id, slot_2)
+        VALUES (new_player_id, new_canadian_result_id);
+        RETURN;
+    END IF;
+
+    -- Get current slot 2 data
+    SELECT ps.slot_2
+    INTO current_canadian_result_id
+    FROM player_scores_2028_cycle ps
+    WHERE ps.player_id = new_player_id;
+
+    current_canadian_result_score := (
+        SELECT SUM(es.part_a + es.part_b) AS score
+        FROM event_scores_2028_cycle es
+        WHERE es.result_id = current_canadian_result_id
+    );
+
+    current_canadian_scores := array_append(
+            current_canadian_scores, (current_canadian_result_id, current_canadian_result_score)::result_score_pair
+                               );
+
+    -- Get new result data
+    SELECT SUM(es.part_a + es.part_b) AS score
+    INTO new_canadian_result_score
+    FROM event_scores_2028_cycle es
+    WHERE result_id = new_canadian_result_id;
+
+    current_canadian_scores := array_append(
+            current_canadian_scores, (new_canadian_result_id, new_canadian_result_score)::result_score_pair
+                               );
+
+    -- Order new result and old result by score, save the highest
+    current_canadian_scores := ARRAY(
+            SELECT t FROM unnest(current_canadian_scores) AS t
+            ORDER BY t.score DESC
+                               );
+
+    second_best_canadian_result_id = current_canadian_scores[2].result_id;
+
+    CALL compute_slots_3_4_2028_cycle(new_player_id, second_best_canadian_result_id);
+
+    UPDATE player_scores_2028_cycle
+    SET slot_2 = current_canadian_scores[1].result_id
+    WHERE player_id = new_player_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE compute_slot_1_2028_cycle(new_player_id INT, new_canadian_result_id INT)
+AS $$
+DECLARE
+    current_out_of_region_scores result_score_pair[];
+    current_out_of_region_result_id INT;
+    current_out_of_region_result_score NUMERIC(6, 2);
+    new_out_of_region_result_score NUMERIC(6, 2);
+    player_exists BOOLEAN;
+    second_best_out_of_region_result_id INT;
+BEGIN
+    SELECT EXISTS (
+        SELECT 1
+        FROM player_scores_2028_cycle
+        WHERE player_id = new_player_id
+    ) INTO player_exists;
+
+    -- Player has not played in other events before, so this new result is their best.
+    -- Write it into the data immediately and exit the function.
+    IF NOT player_exists THEN
+        INSERT INTO player_scores_2028_cycle (player_id, slot_1)
+        VALUES (new_player_id, new_canadian_result_id);
+        RETURN;
+    END IF;
+
+    -- Get current slot 1 data
+    SELECT ps.slot_1
+        INTO current_out_of_region_result_id
+        FROM player_scores_2028_cycle ps
+        WHERE ps.player_id = new_player_id;
+
+    current_out_of_region_result_score := (
+        SELECT SUM(es.part_a + es.part_b) AS score
+        FROM event_scores_2028_cycle es
+        WHERE es.result_id = current_out_of_region_result_id
+    );
+
+    current_out_of_region_scores := array_append(
+        current_out_of_region_scores, (current_out_of_region_result_id, current_out_of_region_result_score)::result_score_pair
+    );
+
+    -- Get new result data
+    SELECT SUM(es.part_a + es.part_b) AS score
+        INTO new_out_of_region_result_score
+        FROM event_scores_2028_cycle es
+        WHERE result_id = new_canadian_result_id;
+
+    current_out_of_region_scores := array_append(
+        current_out_of_region_scores, (new_canadian_result_id, new_out_of_region_result_score)::result_score_pair
+    );
+
+    -- Order new result and old result by score, save the highest
+    current_out_of_region_scores := ARRAY(
+        SELECT t FROM unnest(current_out_of_region_scores) AS t
+        ORDER BY t.score DESC
+    );
+
+    second_best_out_of_region_result_id = current_out_of_region_scores[2].result_id;
+
+    IF event_is_canadian(second_best_out_of_region_result_id) THEN
+        CALL compute_slot_2_2028_cycle(new_player_id, second_best_out_of_region_result_id);
+    ELSE
+        CALL compute_slots_3_4_2028_cycle(new_player_id, second_best_out_of_region_result_id);
+    END IF;
+
+    UPDATE player_scores_2028_cycle
+        SET slot_1 = current_out_of_region_scores[1].result_id
+        WHERE player_id = new_player_id;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE PROCEDURE compute_new_player_score_2025_cycle(
     is_out_of_region BOOLEAN,
     is_online BOOLEAN,
@@ -468,22 +822,75 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE PROCEDURE compute_new_player_score(
+CREATE OR REPLACE PROCEDURE compute_new_player_score_2028_cycle(
     is_out_of_region BOOLEAN,
+    is_canadian BOOLEAN,
     is_online BOOLEAN,
     new_player_id INT,
     new_result_id INT
 )
 AS $$
+DECLARE
+
 BEGIN
-    CALL compute_new_player_score_2025_cycle(
-            is_out_of_region,
-            is_online,
+    -- Out of region + any(foreign, Canadian): check slot 1, check bumped for slot 2 compatibility, check slot 3-4, check slot 5
+    -- Local + Canadian: check slot 2, bump to slot 3-4, bump to slot 5
+    -- Online: Check slot 5
+    IF is_out_of_region THEN
+        CALL compute_slot_1_2028_cycle(
             new_player_id,
             new_result_id
-    );
+        );
+    ELSIF is_canadian THEN
+        CALL compute_slot_2_2028_cycle(
+            new_player_id,
+            new_result_id
+        );
+    ELSIF is_online THEN
+        CALL compute_slot_5_2028_cycle(
+            new_player_id,
+            new_result_id
+        );
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
 
-    CALL update_player_score_total(new_player_id);
+
+CREATE OR REPLACE PROCEDURE compute_new_player_score(
+    is_out_of_region BOOLEAN,
+    is_online BOOLEAN,
+    new_player_id INT,
+    new_result_id INT,
+    current_cycle INT
+)
+AS $$
+DECLARE
+    event_end_date DATE;
+BEGIN
+    SELECT e.event_end_date INTO event_end_date FROM events e
+        JOIN event_results er ON e.id = er.event_id
+        WHERE er.id = new_result_id;
+
+    IF event_end_date BETWEEN '2022-01-01'::DATE AND '2024-12-31'::DATE THEN
+        current_cycle = 2025;
+        CALL compute_new_player_score_2025_cycle(
+           is_out_of_region,
+           is_online,
+           new_player_id,
+           new_result_id
+        );
+    ELSIF event_end_date BETWEEN '2025-01-01'::DATE AND '2027-12-31'::DATE THEN
+        current_cycle = 2028;
+        CALL compute_new_player_score_2028_cycle(
+           is_out_of_region,
+           event_is_canadian(new_result_id),
+           is_online,
+           new_player_id,
+           new_result_id
+        );
+    END IF;
+
+    CALL update_player_score_total(new_player_id, current_cycle);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -514,7 +921,11 @@ BEGIN
         WHERE id = new_event_id;
 
     event_is_valid := event_is_valid(result_event_end_date, event_player_count, new_event_id);
-    event_is_out_of_region := event_is_out_of_region(result_player_region, result_event_region);
+    IF event_is_online THEN
+        event_is_out_of_region := FALSE;
+    ELSE
+        event_is_out_of_region := event_is_out_of_region(result_player_region, result_event_region);
+    END IF;
 
     IF event_is_valid THEN
         CALL compute_new_player_score(
@@ -574,10 +985,60 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE PROCEDURE update_player_score_total(new_player_id INT)
+CREATE OR REPLACE PROCEDURE update_player_score_total_2028_cycle(new_player_id INT)
+AS $$
+DECLARE
+    score_sum NUMERIC(10, 2) := 0;
+    temp_score NUMERIC(10, 2);
+    result_ids RECORD;
+BEGIN
+    SELECT ps.slot_1, ps.slot_2, ps.slot_3, ps.slot_4, ps.slot_5
+        INTO result_ids
+        FROM player_scores_2028_cycle ps
+        WHERE player_id = new_player_id;
+
+    FOR temp_score IN
+        SELECT COALESCE(es.part_a, 0)
+        FROM event_scores_2028_cycle es
+        WHERE es.result_id = ANY(ARRAY[
+            result_ids.slot_1,
+            result_ids.slot_2,
+            result_ids.slot_3,
+            result_ids.slot_4,
+            result_ids.slot_5
+            ])
+        LOOP
+            score_sum := score_sum + temp_score;
+        END LOOP;
+
+    FOR temp_score IN
+        SELECT COALESCE(es.part_b, 0)
+        FROM event_scores_2028_cycle es
+        WHERE es.result_id = ANY(ARRAY[
+            result_ids.slot_1,
+            result_ids.slot_2,
+            result_ids.slot_3,
+            result_ids.slot_4,
+            result_ids.slot_5
+            ])
+        LOOP
+            score_sum := score_sum + temp_score;
+        END LOOP;
+
+    UPDATE player_scores_2028_cycle
+    SET total_score = score_sum
+    WHERE player_id = new_player_id;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE OR REPLACE PROCEDURE update_player_score_total(new_player_id INT, current_cycle INT)
 AS $$
 BEGIN
-    CALL update_player_score_total_2025_cycle(new_player_id);
+    IF current_cycle = 2025 THEN
+        CALL update_player_score_total_2025_cycle(new_player_id);
+    ELSIF current_cycle = 2028 THEN
+        CALL update_player_score_total_2028_cycle(new_player_id);
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 -- endregion Player scores
@@ -596,7 +1057,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER before_insert_event
     BEFORE INSERT ON events
     FOR EACH ROW
-    EXECUTE FUNCTION generate_event_id();
+    EXECUTE FUNCTION generate_event_code();
 
 CREATE TRIGGER placement_check
     BEFORE INSERT OR UPDATE ON event_results
@@ -613,7 +1074,7 @@ CREATE TRIGGER after_event_result_insert
 COMMENT ON TYPE result_score_pair IS
     $s$Dict-like object type to make data manipulation simpler in certain procedures.$s$;
 
-COMMENT ON FUNCTION generate_event_id() IS
+COMMENT ON FUNCTION generate_event_code() IS
     $s$Generates a textual event ID of format YYYY-XXNNNN, where YYYY is the year the event took place, XX is the type
     (ex. 01 for tournament, 02 for league) and NNNN is a serial number.$s$;
 
