@@ -15,6 +15,7 @@ def get_event_paths(data_dir_path: str) -> list[str]:
             if file.endswith('.csv') and not file.endswith('_results.csv'):
                 paths.append(os.path.join(root, file))
 
+    paths.sort()
     return paths
 
 
@@ -26,6 +27,7 @@ def get_event_results_paths(data_dir_path: str) -> list[str]:
             if file.endswith('_results.csv'):
                 paths.append(os.path.join(root, file))
 
+    paths.sort()
     return paths
 
 
@@ -35,8 +37,8 @@ def import_all_data() -> None:
     """
 
     PLAYERS_CSV_PATH = './data/players/players.csv'
-    EVENT_PATHS = get_event_paths(data_dir_path='./data/events')
-    EVENT_RESULTS_PATHS = get_event_results_paths(data_dir_path='./data/events')
+    EVENT_PATHS = get_event_paths(data_dir_path='./data/2028_cycle')
+    EVENT_RESULTS_PATHS = get_event_results_paths(data_dir_path='./data/2028_cycle')
 
     print("Importing players...")
     import_player_data(csv_path=PLAYERS_CSV_PATH, db_path=DATABASE_PATH)

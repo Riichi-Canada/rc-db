@@ -60,7 +60,7 @@ BEGIN
         FROM event_code_sequences
         WHERE year = EXTRACT(YEAR FROM NEW.event_start_date)::INT AND event_type = NEW.event_type;
 
-    NEW.event_id := year_part || '-' || type_part || number_part;
+    NEW.event_code := year_part || '-' || type_part || number_part;
 
     RETURN NEW;
 END;
@@ -142,7 +142,7 @@ BEGIN
     part_A_points := ROUND(1000 * (num_of_players - placement) / (num_of_players - 1), 2);
     IF num_of_players > min_number_of_players THEN
         size_scaling_multiplier := (num_of_players - min_number_of_players) * 0.00125 + 1;
-        part_A_points := part_A_points * LEAST(size_scaling_multiplier, maximum_multiplier);
+        part_A_points := ROUND(part_A_points * LEAST(size_scaling_multiplier, maximum_multiplier), 2);
     END IF;
 
     -- TODO This formula does not account for ties (half-stars etc.), fix it
@@ -254,6 +254,8 @@ BEGIN
     WHERE er.id = result_id;
 
     is_canadian := new_event_region <= num_of_canadian_regions;
+
+    RETURN is_canadian;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -860,12 +862,12 @@ CREATE OR REPLACE PROCEDURE compute_new_player_score(
     is_out_of_region BOOLEAN,
     is_online BOOLEAN,
     new_player_id INT,
-    new_result_id INT,
-    current_cycle INT
+    new_result_id INT
 )
 AS $$
 DECLARE
     event_end_date DATE;
+    current_cycle INT;
 BEGIN
     SELECT e.event_end_date INTO event_end_date FROM events e
         JOIN event_results er ON e.id = er.event_id

@@ -118,7 +118,7 @@ CREATE TABLE IF NOT EXISTS clubs_log (
 --region Events
 CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
-    event_code TEXT UNIQUE NOT NULL,
+    event_code TEXT UNIQUE,
     event_name TEXT UNIQUE NOT NULL,
     event_region INT REFERENCES regions(id),
     event_type INT NOT NULL REFERENCES event_types(id),

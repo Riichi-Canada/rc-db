@@ -22,7 +22,7 @@ class Event(Base):
     __tablename__ = 'events'
 
     id = Column(Integer, primary_key=True)  # Integer ID for foreign key reference
-    event_id = Column(Text, unique=True, nullable=False)  # Human-readable event_id
+    event_code = Column(Text, unique=True, nullable=False)  # Human-readable event_id
     event_name = Column(Text, nullable=False)
     event_region = Column(Integer, ForeignKey('regions.id'))
     event_type = Column(Integer, ForeignKey('event_types.id'), nullable=False)
@@ -41,7 +41,7 @@ class EventResult(Base):
     __tablename__ = 'event_results'
 
     id = Column(Integer, primary_key=True)
-    event_id = Column(Text, ForeignKey('events.event_id'), nullable=False)
+    event_id = Column(Text, ForeignKey('events.id'), nullable=False)
     player_id = Column(Integer, nullable=False)
     placement = Column(Integer, nullable=False)
     score = Column(Integer)
