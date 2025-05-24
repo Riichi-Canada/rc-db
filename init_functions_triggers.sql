@@ -222,6 +222,8 @@ BEGIN
         RETURN event_is_valid_2025_cycle(end_date, num_of_players, new_event_id);
     ELSIF end_date BETWEEN '2025-01-01'::DATE AND '2027-12-31'::DATE THEN
         RETURN event_is_valid_2028_cycle(end_date, num_of_players);
+    ELSE
+        RETURN FALSE;
     END IF;
 END;
 $$ LANGUAGE plpgsql;
