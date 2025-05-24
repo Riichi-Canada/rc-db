@@ -37,23 +37,25 @@ def import_all_data() -> None:
     """
 
     PLAYERS_CSV_PATH = './data/players/players.csv'
-    EVENT_PATHS = get_event_paths(data_dir_path='./data/2028_cycle')
-    EVENT_RESULTS_PATHS = get_event_results_paths(data_dir_path='./data/2028_cycle')
+    EVENT_PATHS = get_event_paths(data_dir_path='./data/events')
+    EVENT_RESULTS_PATHS = get_event_results_paths(data_dir_path='./data/events')
 
     print("Importing players...")
     import_player_data(csv_path=PLAYERS_CSV_PATH, db_path=DATABASE_PATH)
-    print("Done!\n")
+    print("Player import done! Moving on to events.\n---------------------------------------------------------------\n")
 
     print("Importing events...")
     for event in EVENT_PATHS:
+        print(f'Importing data for {os.path.splitext(os.path.basename(event))[0]}...')
         import_event_data(csv_path=event, db_path=DATABASE_PATH)
-    print("Done!\n")
+        print("Done! Moving to next event in queue.\n")
+    print("Event import done! Moving on to results.\n---------------------------------------------------------------\n")
 
     for event_results in EVENT_RESULTS_PATHS:
         print(f"Importing results for {os.path.splitext(os.path.basename(event_results))[0]}...")
         import_event_results_data(csv_path=event_results, db_path=DATABASE_PATH)
         print("Done! Moving to next event in queue.\n")
-    print("\n\nAll done!")
+    print("\n----------------------------------------------------------------------------------------------\nAll done!")
 
 
 if __name__ == '__main__':
