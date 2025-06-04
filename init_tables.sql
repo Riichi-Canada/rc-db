@@ -4,6 +4,7 @@ BEGIN;
 DROP TABLE IF EXISTS event_types CASCADE;
 DROP TABLE IF EXISTS regions CASCADE;
 DROP TABLE IF EXISTS clubs CASCADE;
+DROP TABLE IF EXISTS rulesets CASCADE;
 DROP TABLE IF EXISTS events CASCADE;
 DROP TABLE IF EXISTS event_code_sequences CASCADE;
 DROP TABLE IF EXISTS players CASCADE;
@@ -115,6 +116,34 @@ CREATE TABLE IF NOT EXISTS clubs_log (
 );
 --endregion Clubs
 
+--region Rulesets
+CREATE TABLE IF NOT EXISTS rulesets (
+    id SERIAL PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL
+);
+
+INSERT INTO rulesets (name)
+VALUES
+    ('Unknown'),
+    ('EMA 2008'),
+    ('EMA 2012'),
+    ('EMA 2016'),
+    ('EMA 2025'),
+    ('WRC 2014'),
+    ('WRC 2017'),
+    ('WRC 2022'),
+    ('WRC 2025'),
+    ('Saikouisen'),
+    ('Other');
+
+CREATE TABLE IF NOT EXISTS rulesets_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
+);
+--endregion Rulesets
+
 --region Events
 CREATE TABLE IF NOT EXISTS events (
     id SERIAL PRIMARY KEY,
@@ -128,7 +157,9 @@ CREATE TABLE IF NOT EXISTS events (
     event_country TEXT NOT NULL,
     number_of_players INT NOT NULL,
     is_online BOOLEAN NOT NULL,
-    notes TEXT
+    event_ruleset INT NOT NULL REFERENCES rulesets(id),
+    rule_modifications TEXT,
+    event_notes TEXT
 );
 
 CREATE TABLE IF NOT EXISTS events_log (

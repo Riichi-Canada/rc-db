@@ -22,7 +22,7 @@ class Event(Base):
     __tablename__ = 'events'
 
     id = Column(Integer, primary_key=True)  # Integer ID for foreign key reference
-    event_code = Column(Text, unique=True, nullable=False)  # Human-readable event_id
+    event_code = Column(Text, unique=True, nullable=False)  # Human-readable event code
     event_name = Column(Text, nullable=False)
     event_region = Column(Integer, ForeignKey('regions.id'))
     event_type = Column(Integer, ForeignKey('event_types.id'), nullable=False)
@@ -32,6 +32,9 @@ class Event(Base):
     event_country = Column(Text, nullable=False)
     number_of_players = Column(Integer, nullable=False)
     is_online = Column(Integer, nullable=False)
+    event_ruleset = Column(Text, nullable=False)
+    rule_modifications = Column(Text, nullable=True)
+    event_notes = Column(Text, nullable=True)
 
     region = relationship("Region")
     event_type_ref = relationship("EventType")
