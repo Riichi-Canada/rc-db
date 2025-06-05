@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS event_types (
 );
 
 INSERT INTO event_types (event_type)
-VALUES ('Tournament'), ('League');
+VALUES ('Tournament'), ('League'), ('IORMC Qualifier');
 
 CREATE TABLE IF NOT EXISTS event_types_log (
     id SERIAL PRIMARY KEY,
@@ -133,8 +133,7 @@ VALUES
     ('WRC 2017'),
     ('WRC 2022'),
     ('WRC 2025'),
-    ('Saikouisen'),
-    ('Other');
+    ('Saikouisen');
 
 CREATE TABLE IF NOT EXISTS rulesets_log (
     id SERIAL PRIMARY KEY,
