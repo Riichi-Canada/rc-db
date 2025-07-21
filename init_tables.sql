@@ -106,7 +106,7 @@ VALUES
     ('Capital Riichi Club', 'CRIC'),
     ('Riichi Mahjong University of Waterloo', 'RMUW'),
     ('Club Riichi de Montréal', 'CRM'),
-    ('University of British Columbia Mahjong Club', 'UBC Mahjong');
+    ('University of British Columbia Mahjong Club', 'UBCMJC');
 
 CREATE TABLE IF NOT EXISTS clubs_log (
     id SERIAL PRIMARY KEY,

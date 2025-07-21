@@ -986,6 +986,10 @@ BEGIN
     UPDATE player_scores_2025_cycle
         SET total_score = score_sum
         WHERE player_id = new_player_id;
+
+    UPDATE players
+        SET player_score_2025_cycle = score_sum
+        WHERE id = new_player_id;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -1030,8 +1034,12 @@ BEGIN
         END LOOP;
 
     UPDATE player_scores_2028_cycle
-    SET total_score = score_sum
-    WHERE player_id = new_player_id;
+        SET total_score = score_sum
+        WHERE player_id = new_player_id;
+
+    UPDATE players
+        SET player_score_2028_cycle = score_sum
+        WHERE id = new_player_id;
 END;
 $$ LANGUAGE plpgsql;
 
