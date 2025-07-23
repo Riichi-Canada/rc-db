@@ -135,7 +135,7 @@ DECLARE
     maximum_multiplier NUMERIC := 1.25;
 
     part_B_points NUMERIC(5, 2);
-    top_percentage NUMERIC(5, 2);
+    top_percentage NUMERIC(5, 4);
 BEGIN
     SELECT e.number_of_players INTO num_of_players FROM events e WHERE id = new_event_id;
 
@@ -556,9 +556,9 @@ BEGIN
 
     -- Get current slot 5 data
     SELECT ps.slot_5
-    INTO current_global_result_id
-    FROM player_scores_2028_cycle ps
-    WHERE ps.player_id = new_player_id;
+        INTO current_global_result_id
+        FROM player_scores_2028_cycle ps
+        WHERE ps.player_id = new_player_id;
 
     current_global_result_score := (
         SELECT SUM(es.part_a + es.part_b) AS score
@@ -567,28 +567,28 @@ BEGIN
     );
 
     current_global_scores := array_append(
-            current_global_scores, (current_global_result_id, current_global_result_score)::result_score_pair
-                             );
+        current_global_scores, (current_global_result_id, current_global_result_score)::result_score_pair
+    );
 
     -- Get new result data
     SELECT SUM(es.part_a + es.part_b) AS score
-    INTO new_global_result_score
-    FROM event_scores_2028_cycle es
-    WHERE result_id = new_global_result_id;
+        INTO new_global_result_score
+        FROM event_scores_2028_cycle es
+        WHERE result_id = new_global_result_id;
 
     current_global_scores := array_append(
-            current_global_scores, (new_global_result_id, new_global_result_score)::result_score_pair
-                             );
+        current_global_scores, (new_global_result_id, new_global_result_score)::result_score_pair
+    );
 
     -- Order new result and old result by score, save the highest
     current_global_scores := ARRAY(
-            SELECT t FROM unnest(current_global_scores) AS t
-            ORDER BY t.score DESC
-                             );
+        SELECT t FROM unnest(current_global_scores) AS t
+        ORDER BY t.score DESC
+    );
 
     UPDATE player_scores_2028_cycle
-    SET slot_5 = current_global_scores[1].result_id
-    WHERE player_id = new_player_id;
+        SET slot_5 = current_global_scores[1].result_id
+        WHERE player_id = new_player_id;
 END;
 $$ LANGUAGE plpgsql;
 
