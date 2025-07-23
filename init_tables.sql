@@ -179,6 +179,7 @@ CREATE TABLE IF NOT EXISTS event_code_sequences (
 --region Players
 CREATE TABLE IF NOT EXISTS players (
     id SERIAL PRIMARY KEY,
+    player_rc_number INT,
     first_name TEXT NOT NULL,
     last_name TEXT NOT NULL,
     player_region INT NOT NULL REFERENCES regions(id),
