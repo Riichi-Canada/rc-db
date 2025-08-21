@@ -2,7 +2,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import Event
+from models import Event, Player
 
 
 def import_event_results_data(csv_path: str, db_path: str, event_code: str) -> None:
@@ -31,12 +31,27 @@ def import_event_results_data(csv_path: str, db_path: str, event_code: str) -> N
         event = session.query(Event).filter_by(event_code=e_code).first()
         return event.id if event else None
 
+    def get_player_id(rc_number: int) -> int | None:
+        """
+        Maps the Riichi Canada number in the CSV to the numeric player ID in the database and returns the numeric ID.
+
+        :param rc_number: Player's Riichi Canada number
+        :return: Numeric player ID
+        """
+
+        player = session.query(Player).filter_by(player_rc_number=rc_number).first()
+        return player.id if player else None
+
     event_df['numeric_event_id'] = get_event_id(event_code)
 
     missing_events = event_df[event_df['numeric_event_id'].isna()]
     if not missing_events.empty:
         print("These event_ids were not found in the events table:")
         print(missing_events['event_code'])
+
+    event_df['player_id'] = event_df['player_id'].apply(
+        lambda x: get_player_id(int(x)) if len(str(x)) > 8 else x
+    )
 
     event_df.drop(columns=['event_code'], inplace=True)
     event_df.rename(columns={'numeric_event_id': 'event_id'}, inplace=True)
