@@ -5,12 +5,13 @@ from sqlalchemy.orm import sessionmaker
 from models import Event
 
 
-def import_event_results_data(csv_path: str, db_path: str) -> None:
+def import_event_results_data(csv_path: str, db_path: str, event_code: str) -> None:
     """
     Imports data for an event's results into the database.
 
     :param csv_path: Path to event results CSV
     :param db_path: Database URL
+    :param event_code: event_code
     """
 
     event_df = pd.read_csv(csv_path)
@@ -19,18 +20,18 @@ def import_event_results_data(csv_path: str, db_path: str) -> None:
     Session = sessionmaker(bind=engine)
     session = Session()
 
-    def get_event_code(event_code: str) -> int:
+    def get_event_id(e_code: str) -> int | None:
         """
         Maps the textual event ID in the CSV to the numeric event ID in the database and returns the numeric ID.
 
-        :param event_code: Textual event ID
+        :param e_code: Textual event ID
         :return: Numeric event ID
         """
 
-        event = session.query(Event).filter_by(event_code=event_code).first()
+        event = session.query(Event).filter_by(event_code=e_code).first()
         return event.id if event else None
 
-    event_df['numeric_event_id'] = event_df['event_code'].apply(get_event_code)
+    event_df['numeric_event_id'] = get_event_id(event_code)
 
     missing_events = event_df[event_df['numeric_event_id'].isna()]
     if not missing_events.empty:

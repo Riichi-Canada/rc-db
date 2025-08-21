@@ -3,6 +3,7 @@ BEGIN;
 --region Drop existing data
 DROP TABLE IF EXISTS event_types CASCADE;
 DROP TABLE IF EXISTS regions CASCADE;
+DROP TABLE IF EXISTS player_region_changes CASCADE;
 DROP TABLE IF EXISTS clubs CASCADE;
 DROP TABLE IF EXISTS rulesets CASCADE;
 DROP TABLE IF EXISTS events CASCADE;
@@ -16,6 +17,7 @@ DROP TABLE IF EXISTS player_scores_2028_cycle CASCADE;
 
 DROP TABLE IF EXISTS event_types_log;
 DROP TABLE IF EXISTS regions_log;
+DROP TABLE IF EXISTS player_region_changes_log;
 DROP TABLE IF EXISTS clubs_log;
 DROP TABLE IF EXISTS events_log;
 DROP TABLE IF EXISTS players_log;
@@ -83,9 +85,25 @@ VALUES
     ('Asia'),
     ('Oceania'),
     ('South America'),
+    ('Canadian living abroad'),
     ('Other');
 
 CREATE TABLE IF NOT EXISTS regions_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
+);
+
+CREATE TABLE IF NOT EXISTS player_region_changes (
+    id SERIAL PRIMARY KEY,
+    player_id INT REFERENCES players(id),
+    old_region INT REFERENCES regions(id),
+    new_region INT REFERENCES regions(id),
+    date_of_change DATE
+);
+
+CREATE TABLE IF NOT EXISTS player_region_changes_log (
     id SERIAL PRIMARY KEY,
     operation_type CHAR(1) NOT NULL,
     timestamp TIMESTAMP,
@@ -158,7 +176,8 @@ CREATE TABLE IF NOT EXISTS events (
     is_online BOOLEAN NOT NULL,
     event_ruleset INT NOT NULL REFERENCES rulesets(id),
     rule_modifications TEXT,
-    event_notes TEXT
+    event_notes TEXT,
+    valid_for_ranking BOOLEAN DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS events_log (

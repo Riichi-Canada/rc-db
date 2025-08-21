@@ -217,8 +217,15 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION event_is_valid(end_date DATE, num_of_players INT, new_event_id INT)
 RETURNS BOOLEAN AS $$
+DECLARE
+    event_is_valid_for_ranking BOOLEAN;
 BEGIN
-    IF end_date BETWEEN '2022-01-01'::DATE AND '2024-12-31'::DATE THEN
+    SELECT valid_for_ranking INTO event_is_valid_for_ranking FROM events
+        WHERE id = new_event_id;
+
+    IF NOT event_is_valid_for_ranking THEN
+        RETURN FALSE;
+    ELSIF end_date BETWEEN '2022-01-01'::DATE AND '2024-12-31'::DATE THEN
         RETURN event_is_valid_2025_cycle(end_date, num_of_players, new_event_id);
     ELSIF end_date BETWEEN '2025-01-01'::DATE AND '2027-12-31'::DATE THEN
         RETURN event_is_valid_2028_cycle(end_date, num_of_players);
@@ -540,6 +547,12 @@ DECLARE
     new_global_result_score NUMERIC(6, 2);
     player_exists BOOLEAN;
 BEGIN
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id) VALUES(
+            'Attempting to insert result in slot 5', new_global_result_id
+        );
+    end if;
+
     SELECT EXISTS (
         SELECT 1
         FROM player_scores_2028_cycle
@@ -550,7 +563,13 @@ BEGIN
     -- Write it into the data immediately and exit the function.
     IF NOT player_exists THEN
         INSERT INTO player_scores_2028_cycle (player_id, slot_5)
-        VALUES (new_player_id, new_global_result_id);
+            VALUES (new_player_id, new_global_result_id);
+
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES(
+                'First result for the player, writing this new one in slot 5', new_global_result_id
+            );
+        end if;
         RETURN;
     END IF;
 
@@ -559,6 +578,19 @@ BEGIN
         INTO current_global_result_id
         FROM player_scores_2028_cycle ps
         WHERE ps.player_id = new_player_id;
+
+    if current_global_result_id is null then
+        UPDATE player_scores_2028_cycle
+            SET slot_5 = new_global_result_id
+            WHERE player_id = new_player_id;
+
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES(
+                'No existing result, writing new one in slot 5', new_global_result_id
+            );
+        end if;
+        RETURN;
+    end if;
 
     current_global_result_score := (
         SELECT SUM(es.part_a + es.part_b) AS score
@@ -582,13 +614,19 @@ BEGIN
 
     -- Order new result and old result by score, save the highest
     current_global_scores := ARRAY(
-        SELECT t FROM unnest(current_global_scores) AS t
+        SELECT (result_id, score) FROM unnest(current_global_scores) AS t(result_id, score)
         ORDER BY t.score DESC
     );
 
     UPDATE player_scores_2028_cycle
         SET slot_5 = current_global_scores[1].result_id
         WHERE player_id = new_player_id;
+
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id) VALUES
+            ('Best slot 5 score is now:', current_global_scores[1].result_id),
+            ('The following result gets tossed:', current_global_scores[2].result_id);
+    end if;
 END;
 $$ LANGUAGE plpgsql;
 
@@ -602,11 +640,43 @@ DECLARE
     i INT;
     temp_score NUMERIC(6, 2);
 BEGIN
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id) VALUES(
+            'Attempting to insert result in slot 3/4', new_live_result_id
+        );
+    end if;
+
     -- Get current slot 3-4 data
     SELECT ARRAY[ps.slot_3, ps.slot_4]
-    INTO current_live_ids
-    FROM player_scores_2028_cycle ps
-    WHERE ps.player_id = new_player_id;
+        INTO current_live_ids
+        FROM player_scores_2028_cycle ps
+        WHERE ps.player_id = new_player_id;
+
+    IF current_live_ids[1] IS NULL THEN
+        UPDATE player_scores_2028_cycle
+        SET slot_3 = new_live_result_id
+        WHERE player_id = new_player_id;
+
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES(
+                'No result in slot 3, inserting:', new_live_result_id
+            );
+        end if;
+
+        RETURN;
+    ELSIF current_live_ids[2] IS NULL THEN
+        UPDATE player_scores_2028_cycle
+        SET slot_4 = new_live_result_id
+        WHERE player_id = new_player_id;
+
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES(
+                'No result in slot 4, inserting:', new_live_result_id
+            );
+        end if;
+
+        RETURN;
+    END IF;
 
     current_live_ids := array_remove(current_live_ids, NULL);
 
@@ -623,34 +693,20 @@ BEGIN
 
     -- Get new result data
     SELECT SUM(es.part_a + es.part_b) AS score
-    INTO new_live_score
-    FROM event_scores_2028_cycle es
-    WHERE result_id = new_live_result_id;
+        INTO new_live_score
+        FROM event_scores_2028_cycle es
+        WHERE result_id = new_live_result_id;
 
     current_live_scores := array_append(current_live_scores, (new_live_result_id, new_live_score)::result_score_pair);
 
     -- Order new result and old results by score, save the highest two and bump the new lowest to slot 5
     current_live_scores := ARRAY(
-            SELECT t FROM unnest(current_live_scores) AS t
-            ORDER BY t.score DESC
-                           );
+        SELECT t FROM unnest(current_live_scores) AS t
+        ORDER BY t.score DESC
+    );
 
     IF array_length(current_live_scores, 1) < 2 THEN
         current_live_scores := array_append(current_live_scores, (NULL, NULL)::result_score_pair);
-    END IF;
-
-    IF array_length(current_live_scores, 1) > 2 THEN
-        -- Check the "leftover" result in case it beats results in a lower tier
-        third_best_live_id := current_live_scores[3].result_id;
-        CALL compute_slot_5_2028_cycle(
-                new_player_id,
-                third_best_live_id
-             );
-
-        current_live_scores := ARRAY(
-                SELECT t FROM unnest(current_live_scores) AS t
-                LIMIT 2
-                               );
     END IF;
 
     UPDATE player_scores_2028_cycle
@@ -658,10 +714,36 @@ BEGIN
         slot_3 = current_live_scores[1].result_id,
         slot_4 = current_live_scores[2].result_id
     WHERE player_id = new_player_id;
+
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id) VALUES
+            ('Best slot 3 score is now:', current_live_scores[1].result_id),
+            ('Best slot 4 score is now:', current_live_scores[2].result_id);
+    end if;
+
+    IF array_length(current_live_scores, 1) > 2 THEN
+        -- Check the "leftover" result in case it beats results in a lower tier
+        third_best_live_id := current_live_scores[3].result_id;
+
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES
+                ('Sending third best to slot 5 calc', third_best_live_id);
+        end if;
+
+        CALL compute_slot_5_2028_cycle(
+           new_player_id,
+           third_best_live_id
+        );
+
+--         current_live_scores := ARRAY(
+--             SELECT t FROM unnest(current_live_scores) AS t
+--             LIMIT 2
+--         );
+    END IF;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE PROCEDURE compute_slot_2_2028_cycle(new_player_id INT, new_canadian_result_id INT)
+CREATE OR REPLACE PROCEDURE compute_slot_2_2028_cycle(new_player_id INT, new_canadian_result_id INT, is_out_of_region BOOLEAN)
 AS $$
 DECLARE
     current_canadian_scores result_score_pair[];
@@ -671,6 +753,12 @@ DECLARE
     player_exists BOOLEAN;
     second_best_canadian_result_id INT;
 BEGIN
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id) VALUES(
+            'Attempting to insert result in slot 2', new_canadian_result_id
+        );
+    end if;
+
     SELECT EXISTS (
         SELECT 1
         FROM player_scores_2028_cycle
@@ -681,15 +769,32 @@ BEGIN
     -- Write it into the data immediately and exit the function.
     IF NOT player_exists THEN
         INSERT INTO player_scores_2028_cycle (player_id, slot_2)
-        VALUES (new_player_id, new_canadian_result_id);
+            VALUES (new_player_id, new_canadian_result_id);
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES(
+                'First result for the player, writing this new one in slot 2', new_canadian_result_id
+            );
+        end if;
         RETURN;
     END IF;
 
     -- Get current slot 2 data
     SELECT ps.slot_2
-    INTO current_canadian_result_id
-    FROM player_scores_2028_cycle ps
-    WHERE ps.player_id = new_player_id;
+        INTO current_canadian_result_id
+        FROM player_scores_2028_cycle ps
+        WHERE ps.player_id = new_player_id;
+
+    IF current_canadian_result_id IS NULL THEN
+        UPDATE player_scores_2028_cycle
+            SET slot_2 = new_canadian_result_id
+            WHERE player_id = new_player_id;
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES(
+                'No existing result, writing new one in slot 2', new_canadian_result_id
+            );
+        end if;
+        RETURN;
+    END IF;
 
     current_canadian_result_score := (
         SELECT SUM(es.part_a + es.part_b) AS score
@@ -698,36 +803,53 @@ BEGIN
     );
 
     current_canadian_scores := array_append(
-            current_canadian_scores, (current_canadian_result_id, current_canadian_result_score)::result_score_pair
-                               );
+        current_canadian_scores, (current_canadian_result_id, current_canadian_result_score)::result_score_pair
+    );
 
     -- Get new result data
     SELECT SUM(es.part_a + es.part_b) AS score
-    INTO new_canadian_result_score
-    FROM event_scores_2028_cycle es
-    WHERE result_id = new_canadian_result_id;
+        INTO new_canadian_result_score
+        FROM event_scores_2028_cycle es
+        WHERE result_id = new_canadian_result_id;
 
     current_canadian_scores := array_append(
-            current_canadian_scores, (new_canadian_result_id, new_canadian_result_score)::result_score_pair
-                               );
+        current_canadian_scores, (new_canadian_result_id, new_canadian_result_score)::result_score_pair
+    );
 
     -- Order new result and old result by score, save the highest
     current_canadian_scores := ARRAY(
-            SELECT t FROM unnest(current_canadian_scores) AS t
-            ORDER BY t.score DESC
-                               );
+        SELECT t FROM unnest(current_canadian_scores) AS t
+        ORDER BY t.score DESC
+    );
 
     second_best_canadian_result_id = current_canadian_scores[2].result_id;
 
-    CALL compute_slots_3_4_2028_cycle(new_player_id, second_best_canadian_result_id);
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id) VALUES
+            ('Best slot 2 score is now:', current_canadian_scores[1].result_id),
+            ('2nd best slot 2 score is now:', second_best_canadian_result_id);
+    end if;
 
     UPDATE player_scores_2028_cycle
-    SET slot_2 = current_canadian_scores[1].result_id
-    WHERE player_id = new_player_id;
+        SET slot_2 = current_canadian_scores[1].result_id
+        WHERE player_id = new_player_id;
+
+    IF is_out_of_region THEN
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES ('2nd best is going into slot 1 calc', second_best_canadian_result_id);
+        end if;
+        CALL compute_slot_1_2028_cycle(new_player_id, second_best_canadian_result_id);
+    ELSE
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES ('2nd best is going into slots 3-4 calc', second_best_canadian_result_id);
+        end if;
+        CALL compute_slots_3_4_2028_cycle(new_player_id, second_best_canadian_result_id);
+    END IF;
+
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE OR REPLACE PROCEDURE compute_slot_1_2028_cycle(new_player_id INT, new_canadian_result_id INT)
+CREATE OR REPLACE PROCEDURE compute_slot_1_2028_cycle(new_player_id INT, new_out_of_region_result_id INT)
 AS $$
 DECLARE
     current_out_of_region_scores result_score_pair[];
@@ -737,6 +859,12 @@ DECLARE
     player_exists BOOLEAN;
     second_best_out_of_region_result_id INT;
 BEGIN
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id) VALUES(
+            'Attempting to insert result in slot 1', new_out_of_region_result_id
+        );
+    end if;
+
     SELECT EXISTS (
         SELECT 1
         FROM player_scores_2028_cycle
@@ -746,8 +874,14 @@ BEGIN
     -- Player has not played in other events before, so this new result is their best.
     -- Write it into the data immediately and exit the function.
     IF NOT player_exists THEN
-        INSERT INTO player_scores_2028_cycle (player_id, slot_1)
-        VALUES (new_player_id, new_canadian_result_id);
+        INSERT INTO player_scores_2028_cycle (player_id, slot_1) VALUES(
+            new_player_id, new_out_of_region_result_id
+        );
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES(
+                'First result for the player, writing this new one in slot 1', new_out_of_region_result_id
+            );
+        end if;
         RETURN;
     END IF;
 
@@ -756,6 +890,18 @@ BEGIN
         INTO current_out_of_region_result_id
         FROM player_scores_2028_cycle ps
         WHERE ps.player_id = new_player_id;
+
+    if current_out_of_region_result_id is null then
+        UPDATE player_scores_2028_cycle
+            SET slot_1 = new_out_of_region_result_id
+            WHERE player_id = new_player_id;
+        if new_player_id = 17 then
+            insert into log_debug (data, result_id) VALUES(
+                'No existing result, writing new one in slot 1', new_out_of_region_result_id
+            );
+        end if;
+        RETURN;
+    end if;
 
     current_out_of_region_result_score := (
         SELECT SUM(es.part_a + es.part_b) AS score
@@ -771,10 +917,10 @@ BEGIN
     SELECT SUM(es.part_a + es.part_b) AS score
         INTO new_out_of_region_result_score
         FROM event_scores_2028_cycle es
-        WHERE result_id = new_canadian_result_id;
+        WHERE result_id = new_out_of_region_result_id;
 
     current_out_of_region_scores := array_append(
-        current_out_of_region_scores, (new_canadian_result_id, new_out_of_region_result_score)::result_score_pair
+        current_out_of_region_scores, (new_out_of_region_result_id, new_out_of_region_result_score)::result_score_pair
     );
 
     -- Order new result and old result by score, save the highest
@@ -785,15 +931,21 @@ BEGIN
 
     second_best_out_of_region_result_id = current_out_of_region_scores[2].result_id;
 
-    IF event_is_canadian(second_best_out_of_region_result_id) THEN
-        CALL compute_slot_2_2028_cycle(new_player_id, second_best_out_of_region_result_id);
-    ELSE
-        CALL compute_slots_3_4_2028_cycle(new_player_id, second_best_out_of_region_result_id);
-    END IF;
-
     UPDATE player_scores_2028_cycle
         SET slot_1 = current_out_of_region_scores[1].result_id
         WHERE player_id = new_player_id;
+
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id) VALUES
+            ('Best score is now:', current_out_of_region_scores[1].result_id),
+            ('2nd best is now:', second_best_out_of_region_result_id);
+    end if;
+
+    if new_player_id = 17 then
+        insert into log_debug (data, result_id)
+            VALUES ('2nd best is going into slots 3-4 calc', second_best_out_of_region_result_id);
+    end if;
+    CALL compute_slots_3_4_2028_cycle(new_player_id, second_best_out_of_region_result_id);
 END;
 $$ LANGUAGE plpgsql;
 
@@ -837,16 +989,20 @@ AS $$
 DECLARE
 
 BEGIN
-    -- Out of region + any(foreign, Canadian): check slot 1, check bumped for slot 2 compatibility, check slot 3-4, check slot 5
-    -- Local + Canadian: check slot 2, bump to slot 3-4, bump to slot 5
-    -- Online: Check slot 5
-    IF is_out_of_region THEN
-        CALL compute_slot_1_2028_cycle(
-            new_player_id,
-            new_result_id
-        );
-    ELSIF is_canadian THEN
+    -- Canadian: check slot 2
+    --      If there was nothing in slot 2, we're done.
+    --      If there was already something in slot 2, check if the worst of the two is OOR;
+    --          Bump it to slot 1 if it is and 3-4 if it's not, then bump to slot 5.
+    -- Foreign: check slot 1, bump to slot 3-4, bump to slot 5.
+    -- Online: check slot 5.
+    IF is_canadian THEN
         CALL compute_slot_2_2028_cycle(
+            new_player_id,
+            new_result_id,
+            is_out_of_region
+        );
+    ELSIF NOT is_canadian AND NOT is_online THEN
+        CALL compute_slot_1_2028_cycle(
             new_player_id,
             new_result_id
         );
@@ -908,6 +1064,8 @@ DECLARE
     result_event_end_date DATE;
     event_is_valid BOOLEAN;
     event_is_out_of_region BOOLEAN;
+
+    ev_name TEXT;
 BEGIN
     -- Not a registered canadian player (no ID)
     IF new_player_id IS NULL THEN
@@ -919,8 +1077,8 @@ BEGIN
         FROM players
         WHERE id = new_player_id;
 
-    SELECT event_region, event_end_date, is_online, number_of_players
-        INTO result_event_region, result_event_end_date, event_is_online, event_player_count
+    SELECT event_region, event_end_date, is_online, number_of_players, event_name
+        INTO result_event_region, result_event_end_date, event_is_online, event_player_count, ev_name
         FROM events
         WHERE id = new_event_id;
 

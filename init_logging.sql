@@ -106,6 +106,11 @@ CREATE TRIGGER log_player_scores_2028_cycle
     AFTER INSERT OR UPDATE OR DELETE ON player_scores_2028_cycle
     FOR EACH ROW
     EXECUTE FUNCTION trigger_log_generic();
+
+CREATE TRIGGER log_player_region_changes
+    AFTER INSERT OR UPDATE OR DELETE ON player_region_changes
+    FOR EACH ROW
+    EXECUTE FUNCTION trigger_log_generic();
 -- endregion Triggers
 
 COMMIT;
