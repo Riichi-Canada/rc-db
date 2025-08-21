@@ -94,21 +94,6 @@ CREATE TABLE IF NOT EXISTS regions_log (
     timestamp TIMESTAMP,
     data jsonb
 );
-
-CREATE TABLE IF NOT EXISTS player_region_changes (
-    id SERIAL PRIMARY KEY,
-    player_id INT REFERENCES players(id),
-    old_region INT REFERENCES regions(id),
-    new_region INT REFERENCES regions(id),
-    date_of_change DATE
-);
-
-CREATE TABLE IF NOT EXISTS player_region_changes_log (
-    id SERIAL PRIMARY KEY,
-    operation_type CHAR(1) NOT NULL,
-    timestamp TIMESTAMP,
-    data jsonb
-);
 --endregion Regions
 
 --region Clubs
@@ -208,6 +193,21 @@ CREATE TABLE IF NOT EXISTS players (
 );
 
 CREATE TABLE IF NOT EXISTS players_log (
+    id SERIAL PRIMARY KEY,
+    operation_type CHAR(1) NOT NULL,
+    timestamp TIMESTAMP,
+    data jsonb
+);
+
+CREATE TABLE IF NOT EXISTS player_region_changes (
+    id SERIAL PRIMARY KEY,
+    player_id INT REFERENCES players(id),
+    old_region INT REFERENCES regions(id),
+    new_region INT REFERENCES regions(id),
+    date_of_change DATE
+);
+
+CREATE TABLE IF NOT EXISTS player_region_changes_log (
     id SERIAL PRIMARY KEY,
     operation_type CHAR(1) NOT NULL,
     timestamp TIMESTAMP,
