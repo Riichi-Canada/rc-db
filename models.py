@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, Text, Date, ForeignKey, text
+from sqlalchemy import Column, Integer, Text, Date, ForeignKey, text, Numeric
 from sqlalchemy.orm import declarative_base, relationship
 
 Base = declarative_base()
@@ -9,6 +9,19 @@ class EventType(Base):
 
     id = Column(Integer, primary_key=True, server_default=text("nextval('event_types_id_seq'::regclass)"))
     event_type = Column(Text, nullable=False, unique=True)
+
+
+class Player(Base):
+    __tablename__ = 'players'
+
+    id = Column(Integer, primary_key=True, server_default=text("nextval('event_types_id_seq'::regclass)"))
+    player_rc_number = Column(Integer)
+    first_name = Column(Text, nullable=False)
+    last_name = Column(Text, nullable=False)
+    player_region = Column(Integer, ForeignKey('regions.id'), nullable=False)
+    player_club = Column(Integer, ForeignKey('clubs.id'))
+    player_score_2025_cycle = Column(Numeric)
+    player_score_2028_cycle = Column(Numeric)
 
 
 class Region(Base):
