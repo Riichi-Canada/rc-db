@@ -71,5 +71,6 @@ If you find an event that doesn't fit any of these, please let me know.
 - **8:** WRC 2022
 - **9:** WRC 2025
 - **10:** Saikouisen
+- **11:** M.League
 
 If you find a ruleset that doesn't fit any of the above, please let me know.
