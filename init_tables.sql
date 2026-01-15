@@ -136,7 +136,8 @@ VALUES
     ('WRC 2017'),
     ('WRC 2022'),
     ('WRC 2025'),
-    ('Saikouisen');
+    ('Saikouisen'),
+    ('M.League');
 
 CREATE TABLE IF NOT EXISTS rulesets_log (
     id SERIAL PRIMARY KEY,
