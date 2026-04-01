@@ -239,13 +239,16 @@ CREATE OR REPLACE FUNCTION event_is_out_of_region(event_region INT, player_regio
 RETURNS BOOLEAN AS $$
 DECLARE
     quebec_regions INT[] := ARRAY[1, 2, 3, 4, 5, 6, 7, 8, 9];
-    ontario_regions INT[] := ARRAY[10, 11, 12, 13];
+    ontario_regions INT[] := ARRAY[10, 11, 12, 13, 14, 15];
+    bc_regions INT[] := ARRAY[20, 21, 22];
 BEGIN
     RETURN event_region <> player_region
         AND NOT event_region IS NULL
         AND NOT (  -- Québec and Ontario are considered to be in the same region for this purpose
             (event_region = ANY(quebec_regions) AND player_region = ANY(ontario_regions))
             OR (event_region = ANY(ontario_regions) AND player_region = ANY(quebec_regions))
+            OR (event_region = ANY(ontario_regions) AND player_region = ANY(ontario_regions))
+            OR (event_region = ANY(bc_regions) AND player_region = ANY(bc_regions))
         );
 END;
 $$ LANGUAGE plpgsql;
