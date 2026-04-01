@@ -13,12 +13,6 @@ Again, use a placeholder. Most importantly, **ONLY SPECIFY AN ID FOR CANADIAN PL
 Filename should be something like `toronto_riichi_open_2025_results.csv`.
 
 ## event_region
-Use the following for reference:
-* [Québec map](https://www.cartograf.fr/img/quebec/carte_regions_quebec.jpg)
-* [Ontario map](https://forms.mgcs.gov.on.ca/en/dataset/cd7b542d-0491-4271-b6cf-2eb5efe0f744/resource/8a8dad5c-783f-48be-8243-b10680f2ad22/download/6_fcgp_2024-25_map_of_ontario-regions_en.pdf)
-* [British Columbia map](https://maps-vancouver.com/british-columbia-regions-map)
-
-
 - **1:** Québec (Greater Montreal)
 - **2:** Québec (Capitale-Nationale—Chaudière-Appalaches)
 - **3:** Québec (Outaouais)
@@ -30,28 +24,30 @@ Use the following for reference:
 - **9:** Québec (Côte-Nord—Nord-du-Québec)
 - **10:** Ontario (Central)
 - **11:** Ontario (East)
-- **12:** Ontario (West)
-- **13:** Ontario (North)
-- **14:** British Columbia (South West—Vancouver Island)
-- **15:** British Columbia (South Central—South East)
-- **16:** British Columbia (North)
-- **17:** Nova Scotia
-- **18:** New Brunswick
-- **19:** Prince Edward Island
-- **20:** Newfoundland and Labrador
-- **21:** Manitoba
-- **22:** Saskatchewan
-- **23:** Alberta
-- **24:** Northwest Territories
-- **25:** Yukon
-- **26:** Nunavut
-- **27:** United States
-- **28:** Europe
-- **29:** Japan
-- **30:** Asia
-- **31:** Oceania
-- **32:** South America
-- **33:** Other
+- **12:** Ontario (Golden Horseshoe)
+- **13:** Ontario (North East)
+- **14:** Ontario (North West)
+- **15:** Ontario (South West)
+- **20:** British Columbia (South West—Vancouver Island)
+- **21:** British Columbia (South Central—South East)
+- **22:** British Columbia (North)
+- **30:** Nova Scotia
+- **31:** New Brunswick
+- **32:** Prince Edward Island
+- **33:** Newfoundland and Labrador
+- **40:** Manitoba
+- **41:** Saskatchewan
+- **42:** Alberta
+- **50:** Northwest Territories
+- **51:** Yukon
+- **52:** Nunavut
+- **60:** United States
+- **70:** Europe
+- **80:** Japan
+- **100:** Asia
+- **110:** Oceania
+- **120:** South America
+- **200:** Other
 
 ## event_type
 - **1:** Tournament
