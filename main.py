@@ -34,7 +34,7 @@ def import_all_data() -> None:
     print("Importing events and their results...")
     for event in EVENT_PATHS:
         print(f'Importing data for {os.path.splitext(os.path.basename(event))[0]}...')
-        event_code = import_event_data(csv_path=event, db_path=DATABASE_PATH)
+        event_code = import_event_data(csv_path=event)
         print(f'Importing data for {os.path.splitext(os.path.basename(event))[0]}_results...')
         import_event_results_data(
             csv_path=event.rstrip('.csv') + '_results.csv',

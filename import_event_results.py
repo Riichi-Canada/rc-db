@@ -1,6 +1,5 @@
 import pandas as pd
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from db_config import engine, SessionLocal
 
 from models import Event, Player
 
@@ -42,22 +41,21 @@ def import_event_results_data(csv_path: str, db_path: str, event_code: str) -> N
 
     event_df = pd.read_csv(csv_path)
 
-    engine = create_engine(db_path)
-    Session = sessionmaker(bind=engine)
-    session = Session()
+    with SessionLocal() as session:
+        with session.begin():
+            event_df['player_id'] = event_df['player_id'].apply(
+                lambda x: get_player_id(int(x), session) if len(str(x)) >= 8 else x
+            )
 
-    event_df['player_id'] = event_df['player_id'].apply(
-        lambda x: get_player_id(int(x), session) if len(str(x)) >= 8 else x
-    )
+            event_df['numeric_event_id'] = get_event_id(event_code, session)
 
-    event_df['numeric_event_id'] = get_event_id(event_code, session)
+        missing_events = event_df[event_df['numeric_event_id'].isna()]
+        if not missing_events.empty:
+            print("These event_ids were not found in the events table:")
+            print(missing_events['event_code'])
 
-    missing_events = event_df[event_df['numeric_event_id'].isna()]
-    if not missing_events.empty:
-        print("These event_ids were not found in the events table:")
-        print(missing_events['event_code'])
+        event_df.drop(columns=['event_code'], inplace=True)
+        event_df.rename(columns={'numeric_event_id': 'event_id'}, inplace=True)
 
-    event_df.drop(columns=['event_code'], inplace=True)
-    event_df.rename(columns={'numeric_event_id': 'event_id'}, inplace=True)
-
-    event_df.to_sql('event_results', engine, if_exists='append', index=False)
+        with engine.begin() as conn:
+            event_df.to_sql('event_results', conn, if_exists='append', index=False, method='multi')
